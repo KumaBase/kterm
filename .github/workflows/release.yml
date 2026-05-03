@@ -98,6 +98,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'kterm ${{ github.ref_name }}'
           releaseBody: '## Downloads\n\n| Platform | File |\n|----------|------|\n| macOS (Apple Silicon) | `.dmg` |\n| macOS (Intel) | `.dmg` |\n| Windows | `.msi` / `.exe` |\n| Linux | `.deb` / `.AppImage` |\n\n---\n\n> **First launch?** This is an unsigned build.\n> - **macOS:** `xattr -cr /Applications/kTerm.app` after install\n> - **Windows:** Click **More info** → **Run anyway**\n> - **Linux:** No extra steps'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
