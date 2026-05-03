@@ -55,7 +55,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'kterm ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download this version.'
+          releaseBody: 'See the assets to download this version.\n\n> **Note:** This is an unsigned development build.\n> - **macOS:** After installing, run `xattr -cr /Applications/kTerm.app` to bypass Gatekeeper.\n> - **Windows:** You may see a SmartScreen warning — click "More info" → "Run anyway".'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
