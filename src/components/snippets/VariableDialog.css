@@ -1,0 +1,66 @@
+.var-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 320px;
+}
+
+.var-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.var-dialog__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.var-dialog__input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 6px 8px;
+  outline: none;
+}
+
+.var-dialog__input:focus {
+  border-color: var(--accent-color);
+}
+
+.var-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.var-dialog__btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.var-dialog__btn--cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.var-dialog__btn--cancel:hover {
+  background: var(--bg-active);
+}
+
+.var-dialog__btn--submit {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.var-dialog__btn--submit:hover {
+  opacity: 0.9;
+}

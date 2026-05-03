@@ -31,6 +31,11 @@ pub fn run() {
             commands::ssh::ssh_load_profiles,
             commands::ssh::ssh_save_profiles,
             commands::ssh::ssh_confirm_host_key,
+            commands::snippets::snippets_load,
+            commands::snippets::snippets_save,
+            commands::snippets::snippet_create,
+            commands::snippets::snippet_update,
+            commands::snippets::snippet_delete,
         ])
         .setup(|app| {
             let settings = MenuItemBuilder::with_id("settings", "Settings...")
@@ -48,6 +53,10 @@ pub fn run() {
 
             let toggle_sidebar = MenuItemBuilder::with_id("toggle_sidebar", "Toggle Sidebar")
                 .accelerator("CmdOrCtrl+B")
+                .build(app)?;
+
+            let toggle_snippets = MenuItemBuilder::with_id("toggle_snippets", "Toggle Snippets")
+                .accelerator("CmdOrCtrl+Shift+S")
                 .build(app)?;
 
             let app_menu = SubmenuBuilder::new(app, "kTerm")
@@ -71,6 +80,7 @@ pub fn run() {
 
             let view_menu = SubmenuBuilder::new(app, "View")
                 .item(&toggle_sidebar)
+                .item(&toggle_snippets)
                 .build()?;
 
             let menu = MenuBuilder::new(app)

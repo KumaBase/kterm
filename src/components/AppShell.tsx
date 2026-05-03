@@ -8,6 +8,7 @@ import { useUiStore } from "../stores/ui-store";
 import { useThemeStore } from "../stores/theme-store";
 import { useKeyboard } from "../hooks/use-keyboard";
 import { ProjectSidebar } from "./project/ProjectSidebar";
+import { SnippetPanel } from "./snippets/SnippetPanel";
 import { TerminalContainer } from "./terminal/TerminalContainer";
 import { SettingsView } from "./settings/SettingsView";
 import { QuickConnect } from "./connection/QuickConnect";
@@ -36,6 +37,9 @@ export function AppShell() {
           break;
         case "toggle_sidebar":
           uiStore.toggleSidebar();
+          break;
+        case "toggle_snippets":
+          uiStore.showSnippets();
           break;
       }
     });
@@ -79,6 +83,7 @@ export function AppShell() {
     "CmdOrCtrl+b": () => uiStore.toggleSidebar(),
     "CmdOrCtrl+,": () => uiStore.showSettings(),
     "CmdOrCtrl+Shift+k": () => uiStore.showQuickConnect(),
+    "CmdOrCtrl+Shift+s": () => uiStore.showSnippets(),
   });
 
   const handleNewTab = async () => {
@@ -258,6 +263,23 @@ export function AppShell() {
             />
           </Show>
         </div>
+        <Show when={uiStore.state.rightSidebarVisible}>
+          <div class="app-shell__right-sidebar">
+            <div class="app-shell__right-sidebar-tabs">
+              <button
+                class={`app-shell__right-sidebar-tab ${uiStore.state.rightSidebarTab === "snippets" ? "app-shell__right-sidebar-tab--active" : ""}`}
+                onClick={() => uiStore.showSnippets()}
+              >
+                Snippets
+              </button>
+            </div>
+            <div class="app-shell__right-sidebar-content">
+              <Show when={uiStore.state.rightSidebarTab === "snippets"}>
+                <SnippetPanel />
+              </Show>
+            </div>
+          </div>
+        </Show>
       </div>
       <SettingsView
         open={uiStore.state.settingsOpen}
