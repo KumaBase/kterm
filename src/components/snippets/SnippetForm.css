@@ -40,7 +40,7 @@
   padding: 6px 8px;
   outline: none;
   resize: vertical;
-  font-family: "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
 }
 
 .snippet-form__textarea:focus {

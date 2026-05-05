@@ -36,7 +36,7 @@ export function useProjectStore() {
     const defaultTab = createDefaultTab();
     const project: Project = {
       id: uuidv4(),
-      name: name || "Default Project",
+      name: name || "Default Workspace",
       tabs: [defaultTab],
       activeTabId: defaultTab.id,
       expanded: true,

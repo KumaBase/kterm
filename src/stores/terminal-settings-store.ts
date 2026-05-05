@@ -3,7 +3,7 @@ import { configLoad } from "../ipc/commands";
 import type { TerminalSettings } from "../ipc/commands";
 
 const defaultSettings: TerminalSettings = {
-  font_family: "JetBrains Mono, Menlo, Monaco, Consolas, monospace",
+  font_family: "'JetBrainsMono Nerd Font', 'JetBrains Mono', Menlo, 'Hiragino Sans', monospace",
   font_size: 14,
   scrollback: 10000,
   cursor_style: "block",

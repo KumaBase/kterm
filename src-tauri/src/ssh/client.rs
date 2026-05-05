@@ -1,5 +1,6 @@
 use russh::client;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tauri::AppHandle;
 use crate::ssh::auth::{SshAuth, HostKeyConfirmations};
@@ -8,6 +9,12 @@ use crate::ssh::types::SshConnectParams;
 pub struct SshClient {
     handle: client::Handle<SshAuth>,
     channel: russh::Channel<client::Msg>,
+}
+
+/// Result of an exec command on a remote SSH host
+pub struct ExecResult {
+    pub stdout: String,
+    pub exit_code: i32,
 }
 
 pub struct SshClientWithOutput {
@@ -26,9 +33,13 @@ impl SshClient {
         let host = params.host.clone();
         let port = params.port;
 
-        let mut session = client::connect(Arc::new(config), (host.as_str(), port), handler)
-            .await
-            .map_err(|e| format!("Connection failed: {e}"))?;
+        let mut session = tokio::time::timeout(
+            Duration::from_secs(30),
+            client::connect(Arc::new(config), (host.as_str(), port), handler),
+        )
+        .await
+        .map_err(|_| "Connection timed out after 30 seconds".to_string())?
+        .map_err(|e| format!("Connection failed: {e}"))?;
 
         // Authenticate
         let auth_result = match &params.auth {
@@ -134,5 +145,42 @@ impl SshClient {
             .await
             .map_err(|e| format!("Resize error: {e}"))?;
         Ok(())
+    }
+
+    /// Execute a command on the remote host via a new exec channel.
+    /// Returns stdout and exit code. Does not affect the shell channel.
+    pub async fn exec(&self, command: &str) -> Result<ExecResult, String> {
+        let mut channel = self.handle
+            .channel_open_session()
+            .await
+            .map_err(|e| format!("Failed to open exec channel: {e}"))?;
+
+        channel
+            .exec(true, command)
+            .await
+            .map_err(|e| format!("Failed to exec command: {e}"))?;
+
+        let mut stdout = Vec::new();
+        let mut exit_code = 0;
+
+        loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Data { data }) => {
+                    stdout.extend_from_slice(&data);
+                }
+                Some(russh::ChannelMsg::ExitStatus { exit_status }) => {
+                    exit_code = exit_status as i32;
+                }
+                Some(russh::ChannelMsg::Eof) | None => {
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(ExecResult {
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            exit_code,
+        })
     }
 }

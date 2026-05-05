@@ -1,14 +1,15 @@
-import { createSignal, onMount, JSX } from "solid-js";
+import { createSignal, onMount, children, JSX } from "solid-js";
 import "./SplitPane.css";
 
 interface SplitPaneProps {
   direction: "horizontal" | "vertical";
-  children: JSX.Element[];
+  children: JSX.Element | JSX.Element[];
   onResize?: (sizes: number[]) => void;
   initialSizes?: number[];
 }
 
 export function SplitPaneComponent(props: SplitPaneProps) {
+  const resolved = children(() => props.children);
   const [sizes, setSizes] = createSignal<number[]>(props.initialSizes || []);
   let containerRef!: HTMLDivElement;
   let dragging = false;
@@ -61,28 +62,34 @@ export function SplitPaneComponent(props: SplitPaneProps) {
   };
 
   onMount(() => {
-    const count = props.children.length;
+    const childArray = Array.isArray(resolved()) ? resolved() as JSX.Element[] : [resolved()];
+    const count = childArray.length;
     if (sizes().length === 0) {
       setSizes(Array(count).fill(100 / count));
     }
   });
+
+  const childList = () => {
+    const c = resolved();
+    return Array.isArray(c) ? c as JSX.Element[] : c ? [c] : [];
+  };
 
   return (
     <div
       ref={containerRef}
       class={`split-pane split-pane--${props.direction}`}
     >
-      {props.children.map((child, index) => (
+      {childList().map((child, index) => (
         <>
           <div
             class="split-pane__child"
             style={{
-              [props.direction === "horizontal" ? "width" : "height"]: `${sizes()[index] || 100 / props.children.length}%`,
+              [props.direction === "horizontal" ? "width" : "height"]: `${sizes()[index] || 100 / childList().length}%`,
             }}
           >
             {child}
           </div>
-          {index < props.children.length - 1 && (
+          {index < childList().length - 1 && (
             <div
               class={`split-pane__divider split-pane__divider--${props.direction}`}
               onMouseDown={(e) => handleMouseDown(index, e)}

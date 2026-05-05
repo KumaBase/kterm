@@ -11,7 +11,7 @@ function PaneRenderer(props: { pane: SplitPaneType }) {
   return (
     <Show
       when={props.pane.children.length > 0}
-      fallback={<TerminalPane sessionId={props.pane.sessionId} />}
+      fallback={<TerminalPane sessionId={props.pane.sessionId ?? undefined} />}
     >
       <SplitPaneComponent direction={props.pane.direction || "horizontal"}>
         <For each={props.pane.children}>

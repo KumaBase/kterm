@@ -15,6 +15,7 @@
   -webkit-app-region: drag;
   user-select: none;
   flex-shrink: 0;
+  gap: 0;
 }
 
 .app-shell__tabbar-tabs {
@@ -75,6 +76,44 @@
   color: var(--text-primary);
 }
 
+/* Tabbar icon buttons (sidebar/snippets toggles) */
+.app-shell__tabbar-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.app-shell__tabbar-icon-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.app-shell__tabbar-icon-btn--active {
+  color: var(--accent-color);
+}
+
+.app-shell__tabbar-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.app-shell__tabbar-actions .app-shell__tabbar-icon-btn {
+  border-right: none;
+  border-left: 1px solid var(--border-color);
+}
+
 .app-shell__content {
   flex: 1;
   display: flex;
@@ -85,6 +124,15 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+  position: relative;
+}
+
+.app-shell__terminal-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .app-shell__placeholder {
@@ -187,4 +235,54 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* Profile dropdown for + button */
+.app-shell__tabbar-new-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.app-shell__profile-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  min-width: 160px;
+  padding: 4px 0;
+  margin-top: 2px;
+}
+
+.app-shell__profile-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.1s;
+}
+
+.app-shell__profile-dropdown-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.app-shell__profile-dropdown-item--default {
+  color: var(--accent-color);
+}
+
+.app-shell__profile-dropdown-star {
+  font-size: 11px;
+  color: var(--accent-color);
 }

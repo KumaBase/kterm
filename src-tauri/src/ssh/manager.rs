@@ -51,4 +51,13 @@ impl SshManager {
         }
         Ok(())
     }
+
+    /// Execute a command on the remote host via exec channel
+    pub async fn exec(&self, session_id: &str, command: &str) -> Result<String, String> {
+        let sessions = self.sessions.read().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| format!("SSH session not found: {session_id}"))?;
+        session.exec(command).await
+    }
 }

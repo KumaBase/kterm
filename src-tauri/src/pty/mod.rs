@@ -5,5 +5,5 @@ pub mod types;
 
 pub use manager::PtyManager;
 pub use session::PtySession;
-pub use shell::detect_default_shell;
+pub use shell::{detect_default_shell, detect_shells};
 pub use types::{PtyOutput, PtySpawnParams};

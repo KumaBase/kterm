@@ -9,7 +9,9 @@ pub fn pty_spawn(
     state: State<'_, AppState>,
     app_handle: tauri::AppHandle,
     shell: Option<String>,
+    args: Option<Vec<String>>,
     cwd: Option<String>,
+    env: Option<Vec<(String, String)>>,
     cols: u16,
     rows: u16,
 ) -> Result<SessionInfo, String> {
@@ -25,8 +27,9 @@ pub fn pty_spawn(
     let params = PtySpawnParams {
         session_id: session_id.clone(),
         shell: shell.clone(),
+        args,
         cwd,
-        env: None,
+        env,
         cols,
         rows,
     };

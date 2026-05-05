@@ -62,7 +62,7 @@
 .snippet-panel__item-content {
   font-size: 11px;
   color: var(--text-muted);
-  font-family: "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

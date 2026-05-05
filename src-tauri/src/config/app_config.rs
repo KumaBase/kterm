@@ -41,7 +41,7 @@ pub struct TerminalSettings {
 impl Default for TerminalSettings {
     fn default() -> Self {
         Self {
-            font_family: "JetBrains Mono, Menlo, Monaco, Consolas, monospace".to_string(),
+            font_family: "'JetBrainsMono Nerd Font', 'JetBrains Mono', Menlo, 'Hiragino Sans', monospace".to_string(),
             font_size: 14,
             scrollback: 10000,
             cursor_style: "block".to_string(),
@@ -106,10 +106,19 @@ impl AppConfig {
         let dir = config_dir();
         fs::create_dir_all(&dir)
             .map_err(|e| format!("Failed to create config dir: {e}"))?;
+        let path = config_file_path();
         let content = toml::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize config: {e}"))?;
-        fs::write(config_file_path(), content)
+
+        // Write to temp file first, then rename for atomicity
+        let temp_path = path.with_extension("toml.tmp");
+        fs::write(&temp_path, &content)
             .map_err(|e| format!("Failed to write config: {e}"))?;
+        fs::rename(&temp_path, &path)
+            .map_err(|e| {
+                let _ = fs::remove_file(&temp_path);
+                format!("Failed to rename config: {e}")
+            })?;
         Ok(())
     }
 }

@@ -17,43 +17,61 @@ export function XtermAdapter(props: XtermAdapterProps) {
   const { settings } = useTerminalSettingsStore();
 
   let terminalRef: ReturnType<typeof useTerminal> | null = null;
+  let themeObserver: MutationObserver | null = null;
+
+  onCleanup(() => {
+    themeObserver?.disconnect();
+    terminalRef?.dispose();
+    terminalRef = null;
+  });
 
   onMount(async () => {
-    const t = useTerminal({
-      terminalRef: containerRef,
-      sessionId: props.sessionId,
-    });
-    terminalRef = t;
-    await t.init();
+    try {
+      const t = useTerminal({
+        terminalRef: containerRef,
+        sessionId: props.sessionId,
+      });
+      terminalRef = t;
+      await t.init();
+      if (terminalRef !== t) return;
 
-    // Apply initial padding
-    const padding = settings().padding;
-    containerRef.style.padding = `${padding}px`;
-    containerRef.style.boxSizing = "border-box";
-    containerRef.style.backgroundColor = getTerminalBackground(getEffectiveTheme());
-    t.fitAddon.fit();
+      // Apply initial padding
+      const padding = settings().padding;
+      containerRef.style.padding = `${padding}px`;
+      containerRef.style.boxSizing = "border-box";
+      containerRef.style.backgroundColor = getTerminalBackground(getEffectiveTheme());
+      t.fit();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[kterm] Terminal init failed:", e);
+      terminalRef?.dispose();
+      terminalRef = null;
+      containerRef.textContent = `Terminal initialization failed: ${msg}`;
+      containerRef.style.color = "var(--text-muted)";
+      containerRef.style.padding = "16px";
+      containerRef.style.fontSize = "13px";
+      return;
+    }
 
     // Watch for theme attribute changes via MutationObserver
-    const observer = new MutationObserver(() => {
+    themeObserver = new MutationObserver(() => {
       if (terminalRef) {
         const theme = getEffectiveTheme();
         terminalRef.terminal.options.theme = getTerminalTheme(theme);
         containerRef.style.backgroundColor = getTerminalBackground(theme);
       }
     });
-    observer.observe(document.documentElement, {
+    themeObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],
     });
-
-    onCleanup(() => observer.disconnect());
   });
 
   // Reactive settings updates
   createEffect(() => {
     const s = settings();
     if (!terminalRef) return;
-    const { terminal, fitAddon } = terminalRef;
+    const { terminal } = terminalRef;
 
     terminal.options.fontSize = s.font_size;
     terminal.options.fontFamily = s.font_family;
@@ -66,7 +84,7 @@ export function XtermAdapter(props: XtermAdapterProps) {
 
     containerRef.style.padding = `${s.padding}px`;
     containerRef.style.backgroundColor = getTerminalBackground(getEffectiveTheme());
-    fitAddon.fit();
+    terminalRef.fit();
   });
 
   return (

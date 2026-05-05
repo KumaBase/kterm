@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
-
-type Theme = "Dark" | "Light" | "System";
+import { configLoad, configSave } from "../ipc/commands";
+import type { Theme } from "../ipc/commands";
 
 const [theme, setTheme] = createSignal<Theme>("Dark");
 
@@ -14,9 +14,11 @@ export function useThemeStore() {
   };
 
   const initTheme = async () => {
-    // TODO: Replace with actual configLoad/configSave when IPC commands are available
     try {
-      applyTheme("Dark");
+      const config = await configLoad();
+      const saved = config.theme;
+      setTheme(saved);
+      applyTheme(saved);
     } catch {
       applyTheme("Dark");
     }
@@ -25,9 +27,10 @@ export function useThemeStore() {
   const changeTheme = async (t: Theme) => {
     setTheme(t);
     applyTheme(t);
-    // TODO: Persist theme via configSave when IPC commands are available
     try {
-      // Placeholder for config persistence
+      const config = await configLoad();
+      config.theme = t;
+      await configSave(config);
     } catch (e) {
       console.error("Failed to save theme:", e);
     }

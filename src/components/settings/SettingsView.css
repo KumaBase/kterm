@@ -211,3 +211,21 @@
   min-width: 36px;
   text-align: right;
 }
+
+.settings__font-picker-btn {
+  padding: 6px 10px;
+  background: none;
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  width: 100%;
+  text-align: center;
+}
+
+.settings__font-picker-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}

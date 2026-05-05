@@ -1,6 +1,7 @@
 import { createStore } from "solid-js/store";
-import { ptySpawn, sessionKill as killSession, sessionList as fetchSessionList } from "../ipc/commands";
+import { ptySpawn, sessionKill as killSession, sessionList as fetchSessionList, sessionWrite } from "../ipc/commands";
 import type { SessionInfo } from "../ipc/commands";
+import type { ShellProfile } from "../ipc/profile-commands";
 
 interface SessionState {
   sessions: Record<string, SessionInfo>;
@@ -13,11 +14,18 @@ const [state, setState] = createStore<SessionState>({
 });
 
 export function useSessionStore() {
-  const createSession = async (shell?: string, cwd?: string) => {
-    const session = await ptySpawn(shell, cwd, 80, 24);
+  const createSession = async (shell?: string, args?: string[], cwd?: string, env?: [string, string][]) => {
+    const session = await ptySpawn(shell, args, cwd, 80, 24, env);
     setState("sessions", session.id, session);
     setState("activeSessionId", session.id);
     return session;
+  };
+
+  const createSessionFromProfile = async (profile: ShellProfile) => {
+    const cwd = profile.cwd ?? undefined;
+    const env = profile.env.length > 0 ? profile.env as [string, string][] : undefined;
+    const args = profile.args.length > 0 ? profile.args : undefined;
+    return createSession(profile.shell, args, cwd, env);
   };
 
   const removeSession = async (sessionId: string) => {
@@ -48,6 +56,10 @@ export function useSessionStore() {
     setState({ sessions: {}, activeSessionId: null });
   };
 
+  const writeToSession = async (sessionId: string, data: string) => {
+    await sessionWrite(sessionId, data);
+  };
+
   const restoreFromBackend = async (): Promise<SessionInfo[]> => {
     try {
       const sessions = await fetchSessionList();
@@ -65,11 +77,13 @@ export function useSessionStore() {
   return {
     state,
     createSession,
+    createSessionFromProfile,
     removeSession,
     setActive,
     activeSession,
     sessionList,
     clearAll,
+    writeToSession,
     restoreFromBackend,
   };
 }

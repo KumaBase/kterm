@@ -69,7 +69,11 @@ impl SessionRegistry {
     }
 
     pub fn unregister(&self, session_id: &str) {
-        if self.sessions.write().remove(session_id).is_some() {
+        let removed = {
+            let mut sessions = self.sessions.write();
+            sessions.remove(session_id).is_some()
+        };
+        if removed {
             self.reserved.fetch_sub(1, Ordering::Release);
         }
     }
@@ -122,5 +126,14 @@ impl SessionRegistry {
         }
         self.unregister(session_id);
         Ok(())
+    }
+
+    /// Execute a command on a remote SSH session via exec channel
+    pub async fn ssh_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
+        let kind = self.sessions.read().get(session_id).map(|s| s.kind.clone());
+        match kind {
+            Some(SessionKind::Ssh { .. }) => self.ssh_manager.exec(session_id, command).await,
+            _ => Err(format!("Session {session_id} is not an SSH session")),
+        }
     }
 }

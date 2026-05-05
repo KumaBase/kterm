@@ -13,11 +13,13 @@ export type SessionKind =
 
 export async function ptySpawn(
   shell?: string,
+  args?: string[],
   cwd?: string,
   cols: number = 80,
-  rows: number = 24
+  rows: number = 24,
+  env?: [string, string][]
 ): Promise<SessionInfo> {
-  return invoke("pty_spawn", { shell, cwd, cols, rows });
+  return invoke("pty_spawn", { shell, args, cwd, env, cols, rows });
 }
 
 export async function sessionWrite(
@@ -53,6 +55,10 @@ export async function configSave(config: AppConfig): Promise<void> {
 
 export async function appInfo(): Promise<{ name: string; version: string }> {
   return invoke("app_info");
+}
+
+export async function fontList(): Promise<string[]> {
+  return invoke("font_list");
 }
 
 export interface AppConfig {

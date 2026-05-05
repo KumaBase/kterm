@@ -1,9 +1,33 @@
 import { createSignal, onMount } from "solid-js";
 import { configLoad, configSave } from "../../ipc/commands";
 import { updateTerminalSettings } from "../../stores/terminal-settings-store";
+import { FontPickerModal } from "./FontPickerModal";
+
+const BUNDLED_NF = "JetBrainsMono Nerd Font";
+
+const PRESET_FONTS = [
+  BUNDLED_NF,
+  "JetBrains Mono",
+  "Menlo",
+  "Monaco",
+  "SF Mono",
+  "Fira Code",
+  "FiraCode Nerd Font",
+  "Cascadia Code",
+  "CascadiaCode Nerd Font",
+  "Hack",
+  "Hack Nerd Font",
+  "Source Code Pro",
+  "MesloLGS Nerd Font",
+  "SFMono Nerd Font",
+];
 
 export function TerminalSettings() {
   const [fontFamily, setFontFamily] = createSignal("");
+  const [fontSelect, setFontSelect] = createSignal("");
+  const [customFont, setCustomFont] = createSignal("");
+  const [addedFonts, setAddedFonts] = createSignal<string[]>([]);
+  const [fontPickerOpen, setFontPickerOpen] = createSignal(false);
   const [fontSize, setFontSize] = createSignal(14);
   const [lineHeight, setLineHeight] = createSignal(1.2);
   const [letterSpacing, setLetterSpacing] = createSignal(0);
@@ -12,10 +36,39 @@ export function TerminalSettings() {
   const [cursorStyle, setCursorStyle] = createSignal("block");
   const [cursorBlink, setCursorBlink] = createSignal(true);
 
+  const allFonts = () => [...PRESET_FONTS, ...addedFonts()];
+
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  const pendingSaves: Map<string, any> = new Map();
+
+  const resolveSelectValue = (ff: string): string => {
+    const primary = ff.split(",")[0].replace(/['"]/g, "").trim();
+    if (allFonts().includes(primary)) return primary;
+    return "__custom__";
+  };
+
+  const applyFont = (font: string) => {
+    const value = `'${font}', 'JetBrains Mono', Menlo, monospace`;
+    setFontFamily(value);
+    setFontSelect(font);
+    saveTerminalSetting("font_family", value);
+  };
+
   onMount(async () => {
     try {
       const config = await configLoad();
       setFontFamily(config.terminal.font_family);
+
+      const primary = config.terminal.font_family.split(",")[0].replace(/['"]/g, "").trim();
+      if (!PRESET_FONTS.includes(primary) && primary !== "monospace") {
+        setAddedFonts([primary]);
+      }
+
+      const sv = resolveSelectValue(config.terminal.font_family);
+      setFontSelect(sv);
+      if (sv === "__custom__") {
+        setCustomFont(config.terminal.font_family);
+      }
       setFontSize(config.terminal.font_size);
       setLineHeight(config.terminal.line_height);
       setLetterSpacing(config.terminal.letter_spacing);
@@ -28,15 +81,42 @@ export function TerminalSettings() {
     }
   });
 
-  const saveTerminalSetting = async (key: string, value: any) => {
-    try {
-      const config = await configLoad();
-      (config.terminal as any)[key] = value;
-      await configSave(config);
-      updateTerminalSettings(config.terminal);
-    } catch (e) {
-      console.error("Failed to save config:", e);
+  const saveTerminalSetting = (key: string, value: any) => {
+    // Apply immediately to the UI
+    const currentConfig: Record<string, any> = {
+      font_family: fontFamily(),
+      font_size: fontSize(),
+      scrollback: scrollback(),
+      cursor_style: cursorStyle(),
+      cursor_blink: cursorBlink(),
+      line_height: lineHeight(),
+      letter_spacing: letterSpacing(),
+      padding: padding(),
+    };
+    currentConfig[key] = value;
+    updateTerminalSettings(currentConfig as any);
+
+    pendingSaves.set(key, value);
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try {
+        const config = await configLoad();
+        for (const [k, v] of pendingSaves) {
+          (config.terminal as any)[k] = v;
+        }
+        pendingSaves.clear();
+        await configSave(config);
+      } catch (e) {
+        console.error("Failed to save config:", e);
+      }
+    }, 300);
+  };
+
+  const handleAddSystemFont = (font: string) => {
+    if (!allFonts().includes(font)) {
+      setAddedFonts((prev) => [...prev, font]);
     }
+    applyFont(font);
   };
 
   return (
@@ -45,14 +125,47 @@ export function TerminalSettings() {
         <h3 class="settings__section-title">Font</h3>
         <div class="settings__field">
           <label>Font Family</label>
-          <input
-            type="text"
-            value={fontFamily()}
-            onInput={(e) => {
-              setFontFamily(e.currentTarget.value);
-              saveTerminalSetting("font_family", e.currentTarget.value);
+          <select
+            value={fontSelect()}
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              setFontSelect(v);
+              if (v === "__custom__") {
+                setCustomFont(fontFamily());
+              } else {
+                applyFont(v);
+              }
             }}
-          />
+          >
+            {allFonts().map((f) => (
+              <option value={f} style={{ "font-family": f }}>
+                {f}{f === BUNDLED_NF ? " (bundled)" : ""}
+              </option>
+            ))}
+            <option value="__custom__">Custom...</option>
+          </select>
+          {fontSelect() === "__custom__" && (
+            <input
+              type="text"
+              value={customFont()}
+              style={{ "margin-top": "4px" }}
+              placeholder="e.g. 'My Font', monospace"
+              onInput={(e) => {
+                const v = e.currentTarget.value;
+                setCustomFont(v);
+                setFontFamily(v);
+                saveTerminalSetting("font_family", v);
+              }}
+            />
+          )}
+        </div>
+        <div class="settings__field">
+          <button
+            class="settings__font-picker-btn"
+            onClick={() => setFontPickerOpen(true)}
+          >
+            + システムフォントを追加...
+          </button>
         </div>
         <div class="settings__field">
           <label>Font Size</label>
@@ -171,6 +284,11 @@ export function TerminalSettings() {
           />
         </div>
       </div>
+      <FontPickerModal
+        open={fontPickerOpen()}
+        onClose={() => setFontPickerOpen(false)}
+        onSelect={handleAddSystemFont}
+      />
     </div>
   );
 }

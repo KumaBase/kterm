@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct PtySpawnParams {
     pub session_id: String,
     pub shell: Option<String>,
+    pub args: Option<Vec<String>>,
     pub cwd: Option<String>,
     pub env: Option<Vec<(String, String)>>,
     pub cols: u16,

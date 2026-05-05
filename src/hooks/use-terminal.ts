@@ -1,17 +1,44 @@
-import { onCleanup, onMount } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { sessionWrite, sessionResize } from "../ipc/commands";
 import { onSessionOutput } from "../ipc/events";
 import { getTerminalTheme } from "../themes/terminal-themes";
 import type { TerminalSettings } from "../ipc/commands";
 import "@xterm/xterm/css/xterm.css";
 
+import fontRegularUrl from "../assets/fonts/JetBrainsMonoNerdFont-Regular.ttf?url";
+import fontBoldUrl from "../assets/fonts/JetBrainsMonoNerdFont-Bold.ttf?url";
+
 interface UseTerminalOptions {
   terminalRef: HTMLElement;
   sessionId: string;
   settings?: Partial<TerminalSettings>;
+}
+
+let fontsLoaded = false;
+
+async function ensureFontsLoaded(): Promise<void> {
+  if (fontsLoaded) return;
+  const name = "JetBrainsMono Nerd Font";
+  // Check if already loaded
+  if (document.fonts.check(`16px "${name}"`)) {
+    fontsLoaded = true;
+    return;
+  }
+  try {
+    const regular = new FontFace(name, `url(${fontRegularUrl})`, { weight: "400", style: "normal" });
+    const bold = new FontFace(name, `url(${fontBoldUrl})`, { weight: "700", style: "normal" });
+    const loaded = await Promise.all([regular.load(), bold.load()]);
+    for (const font of loaded) {
+      document.fonts.add(font);
+    }
+    fontsLoaded = true;
+    console.log("[kterm] Nerd Font loaded successfully");
+  } catch (e) {
+    console.warn("[kterm] Failed to load bundled Nerd Font:", e);
+  }
 }
 
 function getEffectiveTheme(): "dark" | "light" {
@@ -25,7 +52,8 @@ export function useTerminal(options: UseTerminalOptions) {
   const effectiveTheme = getEffectiveTheme();
 
   const terminal = new Terminal({
-    fontFamily: options.settings?.font_family || "JetBrains Mono, Menlo, monospace",
+    allowProposedApi: true,
+    fontFamily: options.settings?.font_family || "'JetBrainsMono Nerd Font', 'JetBrains Mono', Menlo, 'Hiragino Sans', monospace",
     fontSize: options.settings?.font_size || 14,
     scrollback: options.settings?.scrollback || 10000,
     cursorBlink: options.settings?.cursor_blink ?? true,
@@ -38,25 +66,69 @@ export function useTerminal(options: UseTerminalOptions) {
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
 
+  const unicode11Addon = new Unicode11Addon();
+  terminal.loadAddon(unicode11Addon);
+  terminal.unicode.activeVersion = "11";
+
   let unlisten: (() => void) | null = null;
+  let resizeObserver: ResizeObserver | null = null;
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  let dataDisposable: { dispose: () => void } | null = null;
+  let webglAddon: WebglAddon | null = null;
+  let disposed = false;
+
+  const isVisible = () => {
+    if (!terminalRef.isConnected) return false;
+    const rect = terminalRef.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+
+  const fit = () => {
+    if (disposed || !terminal.element || !isVisible()) return false;
+
+    try {
+      const dims = fitAddon.proposeDimensions();
+      if (!dims || dims.cols < 1 || dims.rows < 1) return false;
+
+      if (terminal.cols !== dims.cols || terminal.rows !== dims.rows) {
+        terminal.resize(dims.cols, dims.rows);
+      }
+
+      sessionResize(sessionId, dims.cols, dims.rows).catch(console.error);
+      return true;
+    } catch (e) {
+      console.warn("[kterm] Skipping terminal fit until layout is ready:", e);
+      return false;
+    }
+  };
+
+  const scheduleFit = (delay = 0) => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      resizeTimer = null;
+      fit();
+    }, delay);
+  };
 
   const init = async () => {
+    await ensureFontsLoaded();
+    if (disposed) return;
+
     terminal.open(terminalRef);
 
     try {
-      const webglAddon = new WebglAddon();
+      webglAddon = new WebglAddon();
       webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
+        webglAddon?.dispose();
+        webglAddon = null;
       });
       terminal.loadAddon(webglAddon);
     } catch {
       // WebGL not available, fallback to canvas
     }
 
-    fitAddon.fit();
-
     // Handle user input
-    terminal.onData(async (data) => {
+    dataDisposable = terminal.onData(async (data) => {
       try {
         await sessionWrite(sessionId, data);
       } catch (e) {
@@ -74,28 +146,28 @@ export function useTerminal(options: UseTerminalOptions) {
       }
     });
 
-    // Resize handling
-    const observer = new ResizeObserver(() => {
-      fitAddon.fit();
-      const dims = fitAddon.proposeDimensions();
-      if (dims) {
-        sessionResize(sessionId, dims.cols, dims.rows).catch(console.error);
-      }
+    // Resize handling (debounced)
+    resizeObserver = new ResizeObserver(() => {
+      scheduleFit(100);
     });
-    observer.observe(terminalRef);
+    resizeObserver.observe(terminalRef);
 
-    // Initial resize
-    const dims = fitAddon.proposeDimensions();
-    if (dims) {
-      sessionResize(sessionId, dims.cols, dims.rows).catch(console.error);
-    }
-
-    onCleanup(() => {
-      observer.disconnect();
-      unlisten?.();
-      terminal.dispose();
-    });
+    // Initial resize. Restored/inactive tabs may be display:none at this point,
+    // so fit is intentionally best-effort and retried when ResizeObserver fires.
+    requestAnimationFrame(() => fit());
+    scheduleFit(250);
   };
 
-  return { terminal, fitAddon, init };
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeObserver?.disconnect();
+    dataDisposable?.dispose();
+    unlisten?.();
+    webglAddon?.dispose();
+    terminal.dispose();
+  };
+
+  return { terminal, fitAddon, init, fit, dispose };
 }

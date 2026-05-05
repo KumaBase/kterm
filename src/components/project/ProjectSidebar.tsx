@@ -1,12 +1,12 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, onMount } from "solid-js";
 import { useProjectStore } from "../../stores/project-store";
+import { useTmuxStore } from "../../stores/tmux-store";
 import "./ProjectSidebar.css";
 
 interface ProjectSidebarProps {
-  onNewTab?: () => void;
   onNewProject?: () => void;
   onDeleteProject?: (projectId: string) => void;
-  onDeleteTab?: (projectId: string, tabId: string) => void;
+  onTmuxAttach?: (tmuxSessionName: string) => void;
 }
 
 function EditableText(props: {
@@ -60,16 +60,32 @@ function EditableText(props: {
 }
 
 export function ProjectSidebar(props: ProjectSidebarProps) {
-  const { state, setActiveProject, toggleExpand, setActiveTab, updateProjectName, updateTabTitle } = useProjectStore();
+  const { state, setActiveProject, updateProjectName } = useProjectStore();
+  const tmuxStore = useTmuxStore();
+  const [tmuxExpanded, setTmuxExpanded] = createSignal(false);
+  const [newSessionName, setNewSessionName] = createSignal("");
+  const [showCreate, setShowCreate] = createSignal(false);
+
+  onMount(() => {
+    tmuxStore.refreshLocal();
+  });
+
+  const handleCreate = async () => {
+    const name = newSessionName().trim();
+    if (!name) return;
+    await tmuxStore.createLocalSession(name);
+    setNewSessionName("");
+    setShowCreate(false);
+  };
 
   return (
     <div class="project-sidebar">
       <div class="project-sidebar__header">
-        <span class="project-sidebar__title">Projects</span>
+        <span class="project-sidebar__title">Workspaces</span>
         <button
           class="project-sidebar__add-project"
           onClick={() => props.onNewProject?.()}
-          title="New Project"
+          title="New Workspace"
         >
           +
         </button>
@@ -82,12 +98,6 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
                 class="project-sidebar__project-header"
                 onClick={() => setActiveProject(project.id)}
               >
-                <button
-                  class="project-sidebar__expand"
-                  onClick={(e) => { e.stopPropagation(); toggleExpand(project.id); }}
-                >
-                  {project.expanded ? "\u25BC" : "\u25B6"}
-                </button>
                 <EditableText
                   value={project.name}
                   onChange={(name) => updateProjectName(project.id, name)}
@@ -98,49 +108,96 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
                     e.stopPropagation();
                     props.onDeleteProject?.(project.id);
                   }}
-                  title="Delete Project"
+                  title="Delete Workspace"
                 >
                   ×
                 </button>
               </div>
-              <Show when={project.expanded}>
-                <div class="project-sidebar__tabs">
-                  <For each={project.tabs}>
-                    {(tab) => (
-                      <div
-                        class={`project-sidebar__tab ${project.activeTabId === tab.id ? "project-sidebar__tab--active" : ""}`}
-                        onClick={() => setActiveTab(project.id, tab.id)}
-                      >
-                        <EditableText
-                          value={tab.title}
-                          onChange={(title) => updateTabTitle(project.id, tab.id, title)}
-                          class="project-sidebar__tab-name"
-                        />
-                        <button
-                          class="project-sidebar__tab-close"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            props.onDeleteTab?.(project.id, tab.id);
-                          }}
-                          title="Close tab"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    )}
-                  </For>
-                  <button
-                    class="project-sidebar__add-tab"
-                    onClick={() => props.onNewTab?.()}
-                  >
-                    + New Tab
-                  </button>
-                </div>
-              </Show>
             </div>
           )}
         </For>
       </div>
+
+      {/* tmux section */}
+      <Show when={tmuxStore.state.localInfo.installed}>
+        <div class="project-sidebar__tmux-section">
+          <div
+            class="project-sidebar__tmux-header"
+            onClick={() => setTmuxExpanded(!tmuxExpanded())}
+          >
+            <button class="project-sidebar__expand">
+              {tmuxExpanded() ? "\u25BC" : "\u25B6"}
+            </button>
+            <span class="project-sidebar__tmux-title">tmux</span>
+            <div class="project-sidebar__tmux-actions">
+              <button
+                class="project-sidebar__tmux-icon-btn"
+                onClick={(e) => { e.stopPropagation(); tmuxStore.refreshLocal(); }}
+                title="Refresh"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 4v4h4" /><path d="M3.5 12A6 6 0 1 0 3 7.5L1 8" />
+                </svg>
+              </button>
+              <button
+                class="project-sidebar__tmux-icon-btn"
+                onClick={(e) => { e.stopPropagation(); setShowCreate(!showCreate()); }}
+                title="New Session"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <Show when={tmuxStore.state.localInfo.double_tmux}>
+            <div class="project-sidebar__tmux-warning">
+              Nested tmux detected
+            </div>
+          </Show>
+          <Show when={tmuxExpanded()}>
+            <Show when={showCreate()}>
+              <div class="project-sidebar__tmux-create">
+                <input
+                  class="project-sidebar__tmux-input"
+                  type="text"
+                  value={newSessionName()}
+                  onInput={(e) => setNewSessionName(e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") setShowCreate(false); }}
+                  placeholder="Session name"
+                />
+              </div>
+            </Show>
+            <div class="project-sidebar__tmux-sessions">
+              <For each={tmuxStore.state.localSessions}>
+                {(session) => (
+                  <div
+                    class={`project-sidebar__tmux-session ${session.attached ? "project-sidebar__tmux-session--attached" : ""}`}
+                    onClick={() => !session.attached && props.onTmuxAttach?.(session.name)}
+                  >
+                    <span class="project-sidebar__tmux-session-name">
+                      {session.name}
+                    </span>
+                    <span class="project-sidebar__tmux-session-info">
+                      {session.windows}w
+                    </span>
+                    <Show when={!session.attached}>
+                      <button
+                        class="project-sidebar__tmux-kill"
+                        onClick={(e) => { e.stopPropagation(); tmuxStore.killLocalSession(session.name); }}
+                        title="Kill session"
+                      >
+                        ×
+                      </button>
+                    </Show>
+                  </div>
+                )}
+              </For>
+              <Show when={tmuxStore.state.localSessions.length === 0}>
+                <div class="project-sidebar__tmux-empty">No sessions</div>
+              </Show>
+            </div>
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 }

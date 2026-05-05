@@ -3,9 +3,10 @@ import { Modal } from "../common/Modal";
 import { GeneralSettings } from "./GeneralSettings";
 import { TerminalSettings } from "./TerminalSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { ProfileSettings } from "./ProfileSettings";
 import "./SettingsView.css";
 
-type SettingsTab = "general" | "terminal" | "appearance" | "keybindings";
+type SettingsTab = "general" | "terminal" | "appearance" | "profiles" | "keybindings";
 
 interface SettingsViewProps {
   open: boolean;
@@ -19,6 +20,7 @@ export function SettingsView(props: SettingsViewProps) {
     { id: "general", label: "General" },
     { id: "terminal", label: "Terminal" },
     { id: "appearance", label: "Appearance" },
+    { id: "profiles", label: "Profiles" },
     { id: "keybindings", label: "Keybindings" },
   ];
 
@@ -39,6 +41,7 @@ export function SettingsView(props: SettingsViewProps) {
           {activeTab() === "general" && <GeneralSettings />}
           {activeTab() === "terminal" && <TerminalSettings />}
           {activeTab() === "appearance" && <AppearanceSettings />}
+          {activeTab() === "profiles" && <ProfileSettings />}
           {activeTab() === "keybindings" && (
             <div class="settings__placeholder">
               <p>Keybindings settings coming soon</p>
