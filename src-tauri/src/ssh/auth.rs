@@ -27,8 +27,13 @@ impl std::fmt::Display for SshHandlerError {
 /// State for pending host key confirmations, passed to SshAuth
 pub type HostKeyConfirmations = Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>;
 
+/// Shared tracker for the shell channel ID.
+/// The handler only forwards data from this channel to the terminal (not exec channels).
+pub type ShellChannelTracker = Arc<parking_lot::Mutex<Option<russh::ChannelId>>>;
+
 pub struct SshAuth {
     output_tx: mpsc::UnboundedSender<Vec<u8>>,
+    shell_channel: ShellChannelTracker,
     host_key_id: String,
     known_hosts: KnownHosts,
     app_handle: AppHandle,
@@ -42,6 +47,7 @@ impl SshAuth {
         port: u16,
         app_handle: AppHandle,
         pending: HostKeyConfirmations,
+        shell_channel: ShellChannelTracker,
     ) -> Self {
         let host_key_id = if port == 22 {
             host.to_string()
@@ -50,6 +56,7 @@ impl SshAuth {
         };
         Self {
             output_tx,
+            shell_channel,
             host_key_id,
             known_hosts: KnownHosts::load(),
             app_handle,
@@ -127,22 +134,28 @@ impl russh::client::Handler for SshAuth {
 
     async fn data(
         &mut self,
-        _channel: russh::ChannelId,
+        channel: russh::ChannelId,
         data: &[u8],
         _session: &mut russh::client::Session,
     ) -> Result<(), Self::Error> {
-        let _ = self.output_tx.send(data.to_vec());
+        let shell_id = self.shell_channel.lock();
+        if shell_id.map_or(false, |id| id == channel) {
+            let _ = self.output_tx.send(data.to_vec());
+        }
         Ok(())
     }
 
     async fn extended_data(
         &mut self,
-        _channel: russh::ChannelId,
+        channel: russh::ChannelId,
         _ext: u32,
         data: &[u8],
         _session: &mut russh::client::Session,
     ) -> Result<(), Self::Error> {
-        let _ = self.output_tx.send(data.to_vec());
+        let shell_id = self.shell_channel.lock();
+        if shell_id.map_or(false, |id| id == channel) {
+            let _ = self.output_tx.send(data.to_vec());
+        }
         Ok(())
     }
 }

@@ -45,6 +45,10 @@ export async function sessionList(): Promise<SessionInfo[]> {
   return invoke("session_list");
 }
 
+export async function sessionGetCwd(sessionId: string): Promise<string | null> {
+  return invoke("session_get_cwd", { sessionId });
+}
+
 export async function configLoad(): Promise<AppConfig> {
   return invoke("config_load");
 }

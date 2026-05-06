@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicehash/nh-tauri/main/core/tauri-config-schema/schema.json",
   "productName": "kTerm",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "identifier": "com.kumabase.kterm",
   "build": {
     "beforeDevCommand": "npm run dev",

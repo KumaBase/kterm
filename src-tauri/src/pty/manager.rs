@@ -37,6 +37,31 @@ impl PtyManager {
         session.resize(cols, rows)
     }
 
+    pub fn get_cwd(&self, session_id: &str) -> Result<Option<String>, String> {
+        let sessions = self.sessions.read();
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| format!("Session not found: {session_id}"))?;
+
+        let pid = session
+            .child_pid()
+            .ok_or("Cannot determine process ID")?;
+
+        let output = std::process::Command::new("lsof")
+            .args(["-p", &pid.to_string()])
+            .output()
+            .map_err(|e| format!("Failed to run lsof: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines().skip(1) {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() >= 3 && fields[3] == "cwd" {
+                return Ok(Some(fields[fields.len() - 1].to_string()));
+            }
+        }
+        Ok(None)
+    }
+
     pub fn kill(&self, session_id: &str) -> Result<(), String> {
         let mut sessions = self.sessions.write();
         if let Some(session) = sessions.remove(session_id) {

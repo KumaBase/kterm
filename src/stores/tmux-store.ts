@@ -25,9 +25,10 @@ interface RemoteTmuxState {
 /** Tracks which kterm tab is attached to which tmux session */
 interface TmuxTabState {
   ktermTabId: string;
-  sessionId: string; // kterm backend session ID
+  sessionId: string; // kterm backend session ID (PTY for local, SSH for remote)
   tmuxSessionName: string;
   windows: TmuxWindow[];
+  isRemote: boolean; // true for SSH-based tmux
 }
 
 interface TmuxState {
@@ -68,6 +69,22 @@ function parseRemoteSessions(raw: string): TmuxSession[] {
     }
   }
   return sessions;
+}
+
+function parseRemoteWindows(raw: string): TmuxWindow[] {
+  const windows: TmuxWindow[] = [];
+  for (const line of raw.trim().split("\n")) {
+    if (!line.trim()) continue;
+    const parts = line.split("\t");
+    if (parts.length >= 3) {
+      windows.push({
+        index: parseInt(parts[0]) || 0,
+        name: parts[1],
+        active: parts[2] === "1",
+      });
+    }
+  }
+  return windows;
 }
 
 export function useTmuxStore() {
@@ -112,6 +129,11 @@ export function useTmuxStore() {
   /** Detach from a tmux session (keeps it alive for resume) */
   const detachLocalSession = async (sessionName: string) => {
     await tmuxLocalDetach(sessionName);
+  };
+
+  /** Detach from a remote tmux session via SSH exec */
+  const detachRemoteSession = async (sessionId: string, sessionName: string) => {
+    await tmuxRemoteExec(sessionId, `tmux detach-client -t '${sessionName.replace(/'/g, "'\\''")}' 2>/dev/null || true`);
   };
 
   const refreshRemote = async (sessionId: string, host: string) => {
@@ -167,10 +189,10 @@ export function useTmuxStore() {
   // --- Tmux tab mode ---
 
   /** Register a kterm tab as being in tmux mode */
-  const registerTmuxTab = (ktermTabId: string, sessionId: string, tmuxSessionName: string) => {
+  const registerTmuxTab = (ktermTabId: string, sessionId: string, tmuxSessionName: string, isRemote = false) => {
     setState("tmuxTabs", (prev) => [
       ...prev.filter((t) => t.ktermTabId !== ktermTabId),
-      { ktermTabId, sessionId, tmuxSessionName, windows: [] },
+      { ktermTabId, sessionId, tmuxSessionName, windows: [], isRemote },
     ]);
   };
 
@@ -187,7 +209,16 @@ export function useTmuxStore() {
   const pollWindows = async () => {
     for (const tab of state.tmuxTabs) {
       try {
-        const windows = await tmuxLocalWindows(tab.tmuxSessionName);
+        let windows: TmuxWindow[];
+        if (tab.isRemote) {
+          const raw = await tmuxRemoteExec(
+            tab.sessionId,
+            `tmux list-windows -t '${tab.tmuxSessionName.replace(/'/g, "'\\''")}' -F '#{window_index}\\t#{window_name}\\t#{window_active}' 2>/dev/null`
+          );
+          windows = parseRemoteWindows(raw);
+        } else {
+          windows = await tmuxLocalWindows(tab.tmuxSessionName);
+        }
         const idx = state.tmuxTabs.findIndex((t) => t.ktermTabId === tab.ktermTabId);
         if (idx >= 0) {
           setState("tmuxTabs", idx, "windows", windows);
@@ -213,25 +244,45 @@ export function useTmuxStore() {
 
   /** Create a new window in a tmux session */
   const createWindow = async (tmuxSessionName: string) => {
-    await tmuxLocalNewWindow(tmuxSessionName);
+    const tab = state.tmuxTabs.find((t) => t.tmuxSessionName === tmuxSessionName);
+    if (tab?.isRemote) {
+      await tmuxRemoteExec(tab.sessionId, `tmux new-window -t '${tmuxSessionName.replace(/'/g, "'\\''")}'`);
+    } else {
+      await tmuxLocalNewWindow(tmuxSessionName);
+    }
     await pollWindows();
   };
 
   /** Kill a window in a tmux session */
   const killWindow = async (tmuxSessionName: string, windowIndex: number) => {
-    await tmuxLocalKillWindow(tmuxSessionName, windowIndex);
+    const tab = state.tmuxTabs.find((t) => t.tmuxSessionName === tmuxSessionName);
+    if (tab?.isRemote) {
+      await tmuxRemoteExec(tab.sessionId, `tmux kill-window -t '${tmuxSessionName.replace(/'/g, "'\\''")}:${windowIndex}'`);
+    } else {
+      await tmuxLocalKillWindow(tmuxSessionName, windowIndex);
+    }
     await pollWindows();
   };
 
   /** Rename a window in a tmux session */
   const renameWindow = async (tmuxSessionName: string, windowIndex: number, name: string) => {
-    await tmuxLocalRenameWindow(tmuxSessionName, windowIndex, name);
+    const tab = state.tmuxTabs.find((t) => t.tmuxSessionName === tmuxSessionName);
+    if (tab?.isRemote) {
+      await tmuxRemoteExec(tab.sessionId, `tmux rename-window -t '${tmuxSessionName.replace(/'/g, "'\\''")}:${windowIndex}' '${name.replace(/'/g, "'\\''")}'`);
+    } else {
+      await tmuxLocalRenameWindow(tmuxSessionName, windowIndex, name);
+    }
     await pollWindows();
   };
 
   /** Select (switch to) a window in a tmux session */
   const selectWindow = async (tmuxSessionName: string, windowIndex: number) => {
-    await tmuxLocalSelectWindow(tmuxSessionName, windowIndex);
+    const tab = state.tmuxTabs.find((t) => t.tmuxSessionName === tmuxSessionName);
+    if (tab?.isRemote) {
+      await tmuxRemoteExec(tab.sessionId, `tmux select-window -t '${tmuxSessionName.replace(/'/g, "'\\''")}:${windowIndex}'`);
+    } else {
+      await tmuxLocalSelectWindow(tmuxSessionName, windowIndex);
+    }
     await pollWindows();
   };
 
@@ -242,6 +293,7 @@ export function useTmuxStore() {
     createLocalSession,
     killLocalSession,
     detachLocalSession,
+    detachRemoteSession,
     refreshRemote,
     removeRemote,
     registerTmuxTab,

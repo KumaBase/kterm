@@ -15,6 +15,10 @@ import { SnippetPanel } from "./snippets/SnippetPanel";
 import { TerminalContainer } from "./terminal/TerminalContainer";
 import { SettingsView } from "./settings/SettingsView";
 import { QuickConnect } from "./connection/QuickConnect";
+import { SshHostPanel } from "./ssh/SshHostPanel";
+import { sshConnect } from "../ipc/ssh-commands";
+import { sessionGetCwd } from "../ipc/commands";
+import type { SshConfigEntry } from "../ipc/ssh-config-commands";
 import "./AppShell.css";
 
 export function AppShell() {
@@ -67,7 +71,7 @@ export function AppShell() {
     if (existing.length > 0) {
       // Rebuild project/tab structure from surviving backend sessions
       projectStore.clearAll();
-      const project = projectStore.createProject("Default Workspace");
+      const project = projectStore.createProject("Workspace");
       // Remove the default empty tab
       projectStore.removeTab(project.id, project.tabs[0].id);
       // Create one tab per surviving session
@@ -78,7 +82,7 @@ export function AppShell() {
     } else {
       // Fresh start — no surviving sessions
       projectStore.clearAll();
-      const project = projectStore.createProject("Default Workspace");
+      const project = projectStore.createProject("Workspace");
       const session = await sessionStore.createSession();
       projectStore.setPaneSession(project.id, project.tabs[0].id, project.tabs[0].rootPane.id, session.id);
     }
@@ -109,7 +113,16 @@ export function AppShell() {
       if (defaultProfile) {
         session = await sessionStore.createSessionFromProfile(defaultProfile);
       } else {
-        session = await sessionStore.createSession();
+        // Inherit cwd from active tab's session
+        let cwd: string | undefined;
+        const activeTab = projectStore.activeTab();
+        if (activeTab) {
+          const sid = collectSessions(activeTab.rootPane)[0];
+          if (sid) {
+            try { cwd = (await sessionGetCwd(sid)) ?? undefined; } catch {}
+          }
+        }
+        session = await sessionStore.createSession(undefined, undefined, cwd);
       }
     }
     projectStore.setPaneSession(project.id, tab.id, tab.rootPane.id, session.id);
@@ -135,11 +148,31 @@ export function AppShell() {
     }, 300);
   };
 
-  // Open a new tab that attaches to a remote tmux session via SSH
+  // Attach to a remote tmux session from an existing SSH connection
   const handleRemoteTmuxAttach = async (sshSessionId: string, tmuxSessionName: string, host: string) => {
     const project = projectStore.activeProject();
     if (!project) return;
-    // Write attach command directly to the existing SSH session
+
+    // Find the kterm tab that holds this SSH session
+    let targetTabId: string | null = null;
+    for (const proj of projectStore.state.projects) {
+      for (const tab of proj.tabs) {
+        const sessions = collectSessions(tab.rootPane);
+        if (sessions.includes(sshSessionId)) {
+          targetTabId = tab.id;
+          break;
+        }
+      }
+      if (targetTabId) break;
+    }
+
+    // Register the tab as a remote tmux tab
+    if (targetTabId) {
+      tmuxStore.registerTmuxTab(targetTabId, sshSessionId, tmuxSessionName, true);
+      tmuxStore.startPolling();
+    }
+
+    // Write tmux attach command to the SSH session
     await sessionStore.writeToSession(sshSessionId, `tmux attach -t '${tmuxSessionName.replace(/'/g, "'\\''")}'\n`);
   };
 
@@ -151,7 +184,13 @@ export function AppShell() {
     // Detach tmux session before killing PTY to keep it alive
     const tmuxTab = tmuxStore.getTmuxTab(tab.id);
     if (tmuxTab) {
-      try { await tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName); } catch {}
+      try {
+        if (tmuxTab.isRemote) {
+          await tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName);
+        } else {
+          await tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName);
+        }
+      } catch {}
       tmuxStore.unregisterTmuxTab(tab.id);
     }
     const sessions = collectSessions(tab.rootPane);
@@ -171,8 +210,23 @@ export function AppShell() {
     }
   };
 
+  const handleSshConfigConnect = async (entry: SshConfigEntry) => {
+    const host = entry.host_name || entry.host_alias;
+    const user = entry.user || "root";
+    const auth = entry.identity_file
+      ? { type: "PrivateKey" as const, key_path: entry.identity_file, passphrase: null as string | null }
+      : { type: "Agent" as const };
+    try {
+      const sessionInfo = await sshConnect(host, entry.port, user, auth, 80, 24);
+      handleSshConnected(sessionInfo);
+    } catch (e: any) {
+      console.error("SSH config connect failed:", e);
+    }
+  };
+
   const handleNewProject = async () => {
-    const name = `Workspace ${projectStore.state.projects.length + 1}`;
+    const count = projectStore.state.projects.length;
+    const name = count === 0 ? "Workspace" : `Workspace ${count + 1}`;
     const project = projectStore.createProject(name);
     const defaultProfile = profileStore.getDefaultProfile();
     let session;
@@ -198,7 +252,13 @@ export function AppShell() {
       // Detach tmux sessions before killing PTYs (best-effort)
       const tmuxTab = tmuxStore.getTmuxTab(tab.id);
       if (tmuxTab) {
-        try { await tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName); } catch {}
+        try {
+          if (tmuxTab.isRemote) {
+            await tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName);
+          } else {
+            await tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName);
+          }
+        } catch {}
         tmuxStore.unregisterTmuxTab(tab.id);
       }
       const sessions = collectSessions(tab.rootPane);
@@ -345,7 +405,11 @@ export function AppShell() {
                           e.stopPropagation();
                           const tmuxTab = tmuxStore.getTmuxTab(tab.id);
                           if (tmuxTab) {
-                            tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName).catch(() => {});
+                            if (tmuxTab.isRemote) {
+                              tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName).catch(() => {});
+                            } else {
+                              tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName).catch(() => {});
+                            }
                             tmuxStore.unregisterTmuxTab(tab.id);
                           }
                           const sessions = collectSessions(tab.rootPane);
@@ -406,6 +470,7 @@ export function AppShell() {
             onNewProject={handleNewProject}
             onDeleteProject={handleDeleteProject}
             onTmuxAttach={handleTmuxAttach}
+            onRemoteTmuxAttach={handleRemoteTmuxAttach}
           />
         </Show>
         <div class="app-shell__terminal-area">
@@ -447,10 +512,19 @@ export function AppShell() {
               >
                 Snippets
               </button>
+              <button
+                class={`app-shell__right-sidebar-tab ${uiStore.state.rightSidebarTab === "hosts" ? "app-shell__right-sidebar-tab--active" : ""}`}
+                onClick={() => uiStore.showHosts()}
+              >
+                Hosts
+              </button>
             </div>
             <div class="app-shell__right-sidebar-content">
               <Show when={uiStore.state.rightSidebarTab === "snippets"}>
                 <SnippetPanel />
+              </Show>
+              <Show when={uiStore.state.rightSidebarTab === "hosts"}>
+                <SshHostPanel onConnect={handleSshConfigConnect} />
               </Show>
             </div>
           </div>

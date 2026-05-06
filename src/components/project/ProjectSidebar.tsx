@@ -7,6 +7,7 @@ interface ProjectSidebarProps {
   onNewProject?: () => void;
   onDeleteProject?: (projectId: string) => void;
   onTmuxAttach?: (tmuxSessionName: string) => void;
+  onRemoteTmuxAttach?: (sshSessionId: string, tmuxSessionName: string, host: string) => void;
 }
 
 function EditableText(props: {
@@ -234,7 +235,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
                     {(session) => (
                       <div
                         class={`project-sidebar__tmux-session ${session.attached ? "project-sidebar__tmux-session--attached" : ""}`}
-                        onClick={() => !session.attached && props.onTmuxAttach?.(session.name)}
+                        onClick={() => !session.attached && props.onRemoteTmuxAttach?.(remote.sessionId, session.name, remote.host)}
                       >
                         <span class="project-sidebar__tmux-session-name">
                           {session.name}

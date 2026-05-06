@@ -92,3 +92,11 @@ pub fn session_list(
 ) -> Vec<SessionInfo> {
     state.sessions.list()
 }
+
+#[tauri::command]
+pub fn session_get_cwd(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Option<String>, String> {
+    state.sessions.pty_manager().get_cwd(&session_id)
+}

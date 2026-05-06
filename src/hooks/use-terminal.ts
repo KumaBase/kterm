@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { sessionWrite, sessionResize } from "../ipc/commands";
 import { onSessionOutput } from "../ipc/events";
 import { getTerminalTheme } from "../themes/terminal-themes";
@@ -92,9 +93,8 @@ export function useTerminal(options: UseTerminalOptions) {
 
       if (terminal.cols !== dims.cols || terminal.rows !== dims.rows) {
         terminal.resize(dims.cols, dims.rows);
+        sessionResize(sessionId, dims.cols, dims.rows).catch(console.error);
       }
-
-      sessionResize(sessionId, dims.cols, dims.rows).catch(console.error);
       return true;
     } catch (e) {
       console.warn("[kterm] Skipping terminal fit until layout is ready:", e);
@@ -115,6 +115,29 @@ export function useTerminal(options: UseTerminalOptions) {
     if (disposed) return;
 
     terminal.open(terminalRef);
+
+    // Clipboard handling via Tauri plugin (web Clipboard API doesn't work in Tauri)
+    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.type !== "keydown") return true;
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      // Cmd+V / Ctrl+V: Paste from clipboard
+      if (isCmdOrCtrl && e.key === "v") {
+        e.preventDefault();
+        e.stopPropagation();
+        readText().then((text) => {
+          if (text) terminal.paste(text);
+        }).catch(() => {});
+        return false;
+      }
+      // Cmd+C / Ctrl+C: Copy selection to clipboard (only when there's a selection)
+      if (isCmdOrCtrl && e.key === "c" && terminal.hasSelection()) {
+        e.preventDefault();
+        e.stopPropagation();
+        writeText(terminal.getSelection()).catch(() => {});
+        return false;
+      }
+      return true;
+    });
 
     try {
       webglAddon = new WebglAddon();

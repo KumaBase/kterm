@@ -217,6 +217,10 @@ impl PtySession {
             .map_err(|e| format!("Resize error: {e}"))
     }
 
+    pub fn child_pid(&self) -> Option<u32> {
+        self.child.lock().ok()?.as_ref()?.process_id()
+    }
+
     pub fn kill(&self) {
         self.running.store(false, Ordering::Relaxed);
         if let Ok(mut child) = self.child.lock() {

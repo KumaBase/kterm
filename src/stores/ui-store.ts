@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store";
 
-export type RightSidebarTab = "snippets" | "tmux";
+export type RightSidebarTab = "snippets" | "hosts";
 
 interface UiState {
   sidebarVisible: boolean;
@@ -25,8 +25,8 @@ export function useUiStore() {
     setState("rightSidebarTab", "snippets");
     if (!state.rightSidebarVisible) setState("rightSidebarVisible", true);
   };
-  const showTmux = () => {
-    setState("rightSidebarTab", "tmux");
+  const showHosts = () => {
+    setState("rightSidebarTab", "hosts");
     if (!state.rightSidebarVisible) setState("rightSidebarVisible", true);
   };
   const showSettings = () => setState("settingsOpen", true);
@@ -39,7 +39,7 @@ export function useUiStore() {
     toggleSidebar,
     toggleRightSidebar,
     showSnippets,
-    showTmux,
+    showHosts,
     showSettings,
     hideSettings,
     showQuickConnect,

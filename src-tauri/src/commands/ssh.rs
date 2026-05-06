@@ -196,3 +196,8 @@ pub fn ssh_confirm_host_key(
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn ssh_load_system_config() -> Result<Vec<crate::ssh::config_parser::SshConfigEntry>, String> {
+    crate::ssh::config_parser::load_system_ssh_config()
+}

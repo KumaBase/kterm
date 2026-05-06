@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tauri::AppHandle;
-use crate::ssh::auth::{SshAuth, HostKeyConfirmations};
+use crate::ssh::auth::{SshAuth, HostKeyConfirmations, ShellChannelTracker};
 use crate::ssh::types::SshConnectParams;
 
 pub struct SshClient {
@@ -29,7 +29,8 @@ impl SshClient {
         };
 
         let (output_tx, output_rx) = mpsc::unbounded_channel();
-        let handler = SshAuth::new(output_tx, &params.host, params.port, app_handle, pending);
+        let shell_channel: ShellChannelTracker = Arc::new(parking_lot::Mutex::new(None));
+        let handler = SshAuth::new(output_tx, &params.host, params.port, app_handle, pending, shell_channel.clone());
         let host = params.host.clone();
         let port = params.port;
 
@@ -102,6 +103,9 @@ impl SshClient {
             .channel_open_session()
             .await
             .map_err(|e| format!("Failed to open channel: {e}"))?;
+
+        // Register the shell channel ID so the handler only forwards shell data to the terminal
+        *shell_channel.lock() = Some(channel.id());
 
         // Request PTY and shell
         channel
