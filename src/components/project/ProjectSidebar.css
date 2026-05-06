@@ -341,3 +341,30 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* Remote tmux */
+.project-sidebar__tmux-remote-host {
+  margin: 2px 0;
+}
+
+.project-sidebar__tmux-remote-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px 2px 24px;
+}
+
+.project-sidebar__tmux-remote-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-sidebar__tmux-error {
+  padding: 2px 24px;
+  font-size: 10px;
+  color: #f7768e;
+}

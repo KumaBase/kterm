@@ -198,6 +198,62 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
           </Show>
         </div>
       </Show>
+
+      {/* Remote tmux sessions (from SSH connections) */}
+      <Show when={tmuxStore.state.remoteStates.length > 0}>
+        <div class="project-sidebar__tmux-section">
+          <div
+            class="project-sidebar__tmux-header"
+            onClick={() => setTmuxExpanded(!tmuxExpanded())}
+          >
+            <button class="project-sidebar__expand">
+              {tmuxExpanded() ? "\u25BC" : "\u25B6"}
+            </button>
+            <span class="project-sidebar__tmux-title">Remote tmux</span>
+          </div>
+          <Show when={tmuxExpanded()}>
+            <For each={tmuxStore.state.remoteStates}>
+              {(remote) => (
+                <div class="project-sidebar__tmux-remote-host">
+                  <div class="project-sidebar__tmux-remote-header">
+                    <span class="project-sidebar__tmux-remote-name">{remote.host}</span>
+                    <button
+                      class="project-sidebar__tmux-icon-btn"
+                      onClick={(e) => { e.stopPropagation(); tmuxStore.refreshRemote(remote.sessionId, remote.host); }}
+                      title="Refresh"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 4v4h4" /><path d="M3.5 12A6 6 0 1 0 3 7.5L1 8" />
+                      </svg>
+                    </button>
+                  </div>
+                  <Show when={remote.error}>
+                    <div class="project-sidebar__tmux-error">{remote.error}</div>
+                  </Show>
+                  <For each={remote.sessions}>
+                    {(session) => (
+                      <div
+                        class={`project-sidebar__tmux-session ${session.attached ? "project-sidebar__tmux-session--attached" : ""}`}
+                        onClick={() => !session.attached && props.onTmuxAttach?.(session.name)}
+                      >
+                        <span class="project-sidebar__tmux-session-name">
+                          {session.name}
+                        </span>
+                        <span class="project-sidebar__tmux-session-info">
+                          {session.windows}w
+                        </span>
+                      </div>
+                    )}
+                  </For>
+                  <Show when={remote.sessions.length === 0 && !remote.loading && !remote.error}>
+                    <div class="project-sidebar__tmux-empty">No sessions</div>
+                  </Show>
+                </div>
+              )}
+            </For>
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 }

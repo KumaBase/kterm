@@ -164,6 +164,11 @@ export function AppShell() {
     if (!project) return;
     const tab = projectStore.addTab(project.id, sessionInfo.title);
     projectStore.setPaneSession(project.id, tab.id, tab.rootPane.id, sessionInfo.id);
+    // Auto-fetch remote tmux sessions
+    if (sessionInfo.kind?.type === "Ssh") {
+      const host = `${sessionInfo.kind.user}@${sessionInfo.kind.host}`;
+      tmuxStore.refreshRemote(sessionInfo.id, host);
+    }
   };
 
   const handleNewProject = async () => {
