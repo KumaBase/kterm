@@ -36,8 +36,30 @@ export function useProfileStore() {
     });
   };
 
+  const syncProfiles = async () => {
+    const shells = await shellDetectAvailable();
+    const existingPaths = new Set(state.profiles.map((p) => p.shell));
+
+    for (const shellPath of shells) {
+      if (!existingPaths.has(shellPath)) {
+        const profile = await createProfile(
+          shellPathToName(shellPath),
+          shellPath,
+          [],
+          null,
+          []
+        );
+        setState("profiles", (prev) => [...prev, profile]);
+      }
+    }
+  };
+
   const initProfiles = async () => {
-    if (state.loaded && state.profiles.length > 0) return;
+    if (state.loaded && state.profiles.length > 0) {
+      // Even with existing profiles, check for newly installed shells
+      await syncProfiles();
+      return;
+    }
 
     await load();
 
@@ -117,6 +139,7 @@ export function useProfileStore() {
     state,
     load,
     initProfiles,
+    syncProfiles,
     getDefaultProfile,
     getProfile,
     addProfile,

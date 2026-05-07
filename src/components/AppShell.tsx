@@ -102,33 +102,30 @@ export function AppShell() {
     if (!project) return;
     const tab = projectStore.addTab(project.id);
     let session;
-    if (profileId) {
-      const profile = profileStore.getProfile(profileId);
-      if (profile) {
-        session = await sessionStore.createSessionFromProfile(profile);
-      }
-    }
-    if (!session) {
-      // Inherit cwd from active tab's session when no explicit profile cwd
-      let inheritedCwd: string | undefined;
-      const activeTab = projectStore.activeTab();
-      if (activeTab) {
-        const sid = collectSessions(activeTab.rootPane)[0];
-        if (sid) {
-          try { inheritedCwd = (await sessionGetCwd(sid)) ?? undefined; } catch {}
-        }
-      }
 
-      const defaultProfile = profileStore.getDefaultProfile();
-      if (defaultProfile) {
-        const cwd = defaultProfile.cwd || inheritedCwd;
-        const env = defaultProfile.env.length > 0 ? defaultProfile.env as [string, string][] : undefined;
-        const args = defaultProfile.args.length > 0 ? defaultProfile.args : undefined;
-        session = await sessionStore.createSession(defaultProfile.shell, args, cwd, env);
-      } else {
-        session = await sessionStore.createSession(undefined, undefined, inheritedCwd);
+    // Inherit cwd from active tab's session
+    let inheritedCwd: string | undefined;
+    const activeTab = projectStore.activeTab();
+    if (activeTab) {
+      const sid = collectSessions(activeTab.rootPane)[0];
+      if (sid) {
+        try { inheritedCwd = (await sessionGetCwd(sid)) ?? undefined; } catch {}
       }
     }
+
+    const profile = profileId
+      ? profileStore.getProfile(profileId)
+      : profileStore.getDefaultProfile();
+
+    if (profile) {
+      const cwd = profile.cwd || inheritedCwd;
+      const env = profile.env.length > 0 ? profile.env as [string, string][] : undefined;
+      const args = profile.args.length > 0 ? profile.args : undefined;
+      session = await sessionStore.createSession(profile.shell, args, cwd, env);
+    } else {
+      session = await sessionStore.createSession(undefined, undefined, inheritedCwd);
+    }
+
     projectStore.setPaneSession(project.id, tab.id, tab.rootPane.id, session.id);
     syncActiveSession();
   };
@@ -430,8 +427,15 @@ export function AppShell() {
               )}
             </Show>
             <div class="app-shell__tabbar-new-wrapper">
-              <button class="app-shell__tabbar-new" onClick={() => handleNewTab()} onContextMenu={(e) => { e.preventDefault(); setProfileDropdownOpen(!profileDropdownOpen()); }} title="New Tab (Cmd+T)">
+              <button class="app-shell__tabbar-new" onClick={() => handleNewTab()} title="New Tab (Cmd+T)">
                 +
+              </button>
+              <button
+                class="app-shell__tabbar-new-chevron"
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen())}
+                title="New Tab with Profile"
+              >
+                ▾
               </button>
               <Show when={profileDropdownOpen()}>
                 <div class="app-shell__profile-dropdown" onClick={(e) => e.stopPropagation()}>

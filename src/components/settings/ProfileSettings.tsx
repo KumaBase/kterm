@@ -56,15 +56,24 @@ export function ProfileSettings() {
     await profileStore.setDefault(id);
   };
 
+  const handleDetect = async () => {
+    await profileStore.syncProfiles();
+  };
+
   return (
     <div>
       <div class="settings__section">
         <div class="profile-settings__header">
           <h3 class="settings__section-title">Shell Profiles</h3>
           <Show when={!showForm()}>
-            <button class="profile-settings__add-btn" onClick={() => { resetForm(); setShowForm(true); }}>
-              + Add Profile
-            </button>
+            <div class="profile-settings__header-actions">
+              <button class="profile-settings__detect-btn" onClick={handleDetect}>
+                ↻ Detect Shells
+              </button>
+              <button class="profile-settings__add-btn" onClick={() => { resetForm(); setShowForm(true); }}>
+                + Add Profile
+              </button>
+            </div>
           </Show>
         </div>
 
