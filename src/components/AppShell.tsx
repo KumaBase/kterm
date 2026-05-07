@@ -109,20 +109,24 @@ export function AppShell() {
       }
     }
     if (!session) {
+      // Inherit cwd from active tab's session when no explicit profile cwd
+      let inheritedCwd: string | undefined;
+      const activeTab = projectStore.activeTab();
+      if (activeTab) {
+        const sid = collectSessions(activeTab.rootPane)[0];
+        if (sid) {
+          try { inheritedCwd = (await sessionGetCwd(sid)) ?? undefined; } catch {}
+        }
+      }
+
       const defaultProfile = profileStore.getDefaultProfile();
       if (defaultProfile) {
-        session = await sessionStore.createSessionFromProfile(defaultProfile);
+        const cwd = defaultProfile.cwd || inheritedCwd;
+        const env = defaultProfile.env.length > 0 ? defaultProfile.env as [string, string][] : undefined;
+        const args = defaultProfile.args.length > 0 ? defaultProfile.args : undefined;
+        session = await sessionStore.createSession(defaultProfile.shell, args, cwd, env);
       } else {
-        // Inherit cwd from active tab's session
-        let cwd: string | undefined;
-        const activeTab = projectStore.activeTab();
-        if (activeTab) {
-          const sid = collectSessions(activeTab.rootPane)[0];
-          if (sid) {
-            try { cwd = (await sessionGetCwd(sid)) ?? undefined; } catch {}
-          }
-        }
-        session = await sessionStore.createSession(undefined, undefined, cwd);
+        session = await sessionStore.createSession(undefined, undefined, inheritedCwd);
       }
     }
     projectStore.setPaneSession(project.id, tab.id, tab.rootPane.id, session.id);
