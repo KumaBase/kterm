@@ -36,6 +36,8 @@ pub struct TerminalSettings {
     pub letter_spacing: i16,
     #[serde(default = "default_padding")]
     pub padding: u16,
+    #[serde(default)]
+    pub copy_on_select: bool,
 }
 
 impl Default for TerminalSettings {
@@ -49,6 +51,7 @@ impl Default for TerminalSettings {
             line_height: default_line_height(),
             letter_spacing: 0,
             padding: default_padding(),
+            copy_on_select: false,
         }
     }
 }

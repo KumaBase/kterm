@@ -11,6 +11,7 @@ const defaultSettings: TerminalSettings = {
   line_height: 1.2,
   letter_spacing: 0,
   padding: 8,
+  copy_on_select: false,
 };
 
 const [settings, setSettings] = createSignal<TerminalSettings>(defaultSettings);

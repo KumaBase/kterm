@@ -109,6 +109,22 @@ export function useProjectStore() {
     }));
   };
 
+  const reorderProjects = (fromIndex: number, toIndex: number) => {
+    setState(produce((s) => {
+      const [item] = s.projects.splice(fromIndex, 1);
+      s.projects.splice(toIndex, 0, item);
+    }));
+  };
+
+  const reorderTabs = (projectId: ProjectId, fromIndex: number, toIndex: number) => {
+    setState(produce((s) => {
+      const project = s.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      const [tab] = project.tabs.splice(fromIndex, 1);
+      project.tabs.splice(toIndex, 0, tab);
+    }));
+  };
+
   const splitPane = (
     projectId: ProjectId,
     tabId: TabId,
@@ -217,6 +233,8 @@ export function useProjectStore() {
     removeTab,
     setActiveTab,
     updateProjectName,
+    reorderProjects,
+    reorderTabs,
     updateTabTitle,
     splitPane,
     removePane,

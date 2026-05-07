@@ -82,6 +82,7 @@ export interface TerminalSettings {
   line_height: number;
   letter_spacing: number;
   padding: number;
+  copy_on_select: boolean;
 }
 
 export interface WindowSettings {

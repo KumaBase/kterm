@@ -286,6 +286,8 @@ export function AppShell() {
   // Inline tab title editing in tabbar
   const [editingTabId, setEditingTabId] = createSignal<string | null>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = createSignal(false);
+  const [dragOverTabId, setDragOverTabId] = createSignal<string | null>(null);
+  let draggedTabId: string | null = null;
   let tabEditRef!: HTMLInputElement;
 
   const startTabEdit = (tabId: string) => {
@@ -369,10 +371,43 @@ export function AppShell() {
             <Show when={activeProject()}>
               {(project) => (
                 <For each={project().tabs}>
-                  {(tab) => (
+                  {(tab, getIndex) => (
                     <div
-                      class={`app-shell__tab ${project().activeTabId === tab.id ? "app-shell__tab--active" : ""}`}
+                      class={`app-shell__tab ${project().activeTabId === tab.id ? "app-shell__tab--active" : ""} ${dragOverTabId() === tab.id ? "app-shell__tab--drag-over" : ""}`}
+                      draggable="true"
                       onClick={() => { projectStore.setActiveTab(project().id, tab.id); syncActiveSession(); }}
+                      onDragStart={(e) => {
+                        draggedTabId = tab.id;
+                        e.dataTransfer!.effectAllowed = "move";
+                        e.dataTransfer!.setData("text/plain", tab.id);
+                        (e.currentTarget as HTMLElement).classList.add("app-shell__tab--dragging");
+                      }}
+                      onDragEnd={(e) => {
+                        draggedTabId = null;
+                        setDragOverTabId(null);
+                        (e.currentTarget as HTMLElement).classList.remove("app-shell__tab--dragging");
+                      }}
+                      onDragOver={(e) => {
+                        if (draggedTabId === null || draggedTabId === tab.id) return;
+                        e.preventDefault();
+                        e.dataTransfer!.dropEffect = "move";
+                        setDragOverTabId(tab.id);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverTabId() === tab.id) setDragOverTabId(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOverTabId(null);
+                        if (draggedTabId === null || draggedTabId === tab.id) return;
+                        const tabs = project().tabs;
+                        const fromIdx = tabs.findIndex((t) => t.id === draggedTabId);
+                        const toIdx = getIndex();
+                        if (fromIdx !== -1 && fromIdx !== toIdx) {
+                          projectStore.reorderTabs(project().id, fromIdx, toIdx);
+                        }
+                        draggedTabId = null;
+                      }}
                     >
                       <Show
                         when={editingTabId() === tab.id}

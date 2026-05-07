@@ -159,6 +159,15 @@ export function useTerminal(options: UseTerminalOptions) {
       }
     });
 
+    // Copy on select
+    if (options.settings?.copy_on_select) {
+      terminal.onSelectionChange(() => {
+        if (terminal.hasSelection()) {
+          writeText(terminal.getSelection()).catch(() => {});
+        }
+      });
+    }
+
     // Handle session output
     unlisten = await onSessionOutput((payload) => {
       if (payload.session_id !== sessionId) return;

@@ -61,11 +61,13 @@ function EditableText(props: {
 }
 
 export function ProjectSidebar(props: ProjectSidebarProps) {
-  const { state, setActiveProject, updateProjectName } = useProjectStore();
+  const { state, setActiveProject, updateProjectName, reorderProjects } = useProjectStore();
   const tmuxStore = useTmuxStore();
   const [tmuxExpanded, setTmuxExpanded] = createSignal(false);
   const [newSessionName, setNewSessionName] = createSignal("");
   const [showCreate, setShowCreate] = createSignal(false);
+  const [dragOverProjectId, setDragOverProjectId] = createSignal<string | null>(null);
+  let draggedProjectId: string | null = null;
 
   onMount(() => {
     tmuxStore.refreshLocal();
@@ -93,8 +95,42 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       </div>
       <div class="project-sidebar__list">
         <For each={state.projects}>
-          {(project) => (
-            <div class={`project-sidebar__project ${state.activeProjectId === project.id ? "project-sidebar__project--active" : ""}`}>
+          {(project, getIndex) => (
+            <div
+              class={`project-sidebar__project ${state.activeProjectId === project.id ? "project-sidebar__project--active" : ""} ${dragOverProjectId() === project.id ? "project-sidebar__project--drag-over" : ""}`}
+              draggable="true"
+              onDragStart={(e) => {
+                draggedProjectId = project.id;
+                e.dataTransfer!.effectAllowed = "move";
+                e.dataTransfer!.setData("text/plain", project.id);
+                (e.currentTarget as HTMLElement).classList.add("project-sidebar__project--dragging");
+              }}
+              onDragEnd={(e) => {
+                draggedProjectId = null;
+                setDragOverProjectId(null);
+                (e.currentTarget as HTMLElement).classList.remove("project-sidebar__project--dragging");
+              }}
+              onDragOver={(e) => {
+                if (draggedProjectId === null || draggedProjectId === project.id) return;
+                e.preventDefault();
+                e.dataTransfer!.dropEffect = "move";
+                setDragOverProjectId(project.id);
+              }}
+              onDragLeave={() => {
+                if (dragOverProjectId() === project.id) setDragOverProjectId(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverProjectId(null);
+                if (draggedProjectId === null || draggedProjectId === project.id) return;
+                const fromIdx = state.projects.findIndex((p) => p.id === draggedProjectId);
+                const toIdx = getIndex();
+                if (fromIdx !== -1 && fromIdx !== toIdx) {
+                  reorderProjects(fromIdx, toIdx);
+                }
+                draggedProjectId = null;
+              }}
+            >
               <div
                 class="project-sidebar__project-header"
                 onClick={() => setActiveProject(project.id)}

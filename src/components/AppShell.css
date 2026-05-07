@@ -50,6 +50,14 @@
   border-bottom: 2px solid var(--accent-color);
 }
 
+.app-shell__tab--dragging {
+  opacity: 0.4;
+}
+
+.app-shell__tab--drag-over {
+  border-left: 2px solid var(--accent-color);
+}
+
 .app-shell__tab-title {
   overflow: hidden;
   text-overflow: ellipsis;

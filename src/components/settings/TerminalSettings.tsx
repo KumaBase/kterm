@@ -35,6 +35,7 @@ export function TerminalSettings() {
   const [scrollback, setScrollback] = createSignal(10000);
   const [cursorStyle, setCursorStyle] = createSignal("block");
   const [cursorBlink, setCursorBlink] = createSignal(true);
+  const [copyOnSelect, setCopyOnSelect] = createSignal(false);
 
   const allFonts = () => [...PRESET_FONTS, ...addedFonts()];
 
@@ -76,6 +77,7 @@ export function TerminalSettings() {
       setScrollback(config.terminal.scrollback);
       setCursorStyle(config.terminal.cursor_style);
       setCursorBlink(config.terminal.cursor_blink);
+      setCopyOnSelect(config.terminal.copy_on_select);
     } catch (e) {
       console.error("Failed to load config:", e);
     }
@@ -89,6 +91,7 @@ export function TerminalSettings() {
       scrollback: scrollback(),
       cursor_style: cursorStyle(),
       cursor_blink: cursorBlink(),
+      copy_on_select: copyOnSelect(),
       line_height: lineHeight(),
       letter_spacing: letterSpacing(),
       padding: padding(),
@@ -263,6 +266,20 @@ export function TerminalSettings() {
             onClick={() => {
               setCursorBlink(!cursorBlink());
               saveTerminalSetting("cursor_blink", !cursorBlink());
+            }}
+          />
+        </div>
+      </div>
+      <div class="settings__section">
+        <h3 class="settings__section-title">Clipboard</h3>
+        <div class="settings__field-row">
+          <label>Copy on Select</label>
+          <div
+            class={`settings__toggle ${copyOnSelect() ? "settings__toggle--active" : ""}`}
+            onClick={() => {
+              const v = !copyOnSelect();
+              setCopyOnSelect(v);
+              saveTerminalSetting("copy_on_select", v);
             }}
           />
         </div>
