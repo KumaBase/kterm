@@ -337,7 +337,8 @@ export function AppShell() {
   const [editingTabId, setEditingTabId] = createSignal<string | null>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = createSignal(false);
   const [dragOverTabId, setDragOverTabId] = createSignal<string | null>(null);
-  let draggedTabId: string | null = null;
+  const [draggingTabId, setDraggingTabId] = createSignal<string | null>(null);
+  let suppressNextClick = false;
   let tabEditRef!: HTMLInputElement;
 
   const startTabEdit = (tabId: string) => {
@@ -423,40 +424,53 @@ export function AppShell() {
                 <For each={project().tabs}>
                   {(tab, getIndex) => (
                     <div
-                      class={`app-shell__tab ${project().activeTabId === tab.id ? "app-shell__tab--active" : ""} ${dragOverTabId() === tab.id ? "app-shell__tab--drag-over" : ""}`}
-                      draggable="true"
-                      onClick={() => { projectStore.setActiveTab(project().id, tab.id); syncActiveSession(); }}
-                      onDragStart={(e) => {
-                        draggedTabId = tab.id;
-                        e.dataTransfer!.effectAllowed = "move";
-                        e.dataTransfer!.setData("text/plain", tab.id);
-                        (e.currentTarget as HTMLElement).classList.add("app-shell__tab--dragging");
+                      class={`app-shell__tab ${project().activeTabId === tab.id ? "app-shell__tab--active" : ""} ${dragOverTabId() === tab.id ? "app-shell__tab--drag-over" : ""} ${draggingTabId() === tab.id ? "app-shell__tab--dragging" : ""}`}
+                      data-tab-id={tab.id}
+                      onClick={() => {
+                        if (suppressNextClick) { suppressNextClick = false; return; }
+                        projectStore.setActiveTab(project().id, tab.id);
+                        syncActiveSession();
                       }}
-                      onDragEnd={(e) => {
-                        draggedTabId = null;
-                        setDragOverTabId(null);
-                        (e.currentTarget as HTMLElement).classList.remove("app-shell__tab--dragging");
-                      }}
-                      onDragOver={(e) => {
-                        if (draggedTabId === null || draggedTabId === tab.id) return;
-                        e.preventDefault();
-                        e.dataTransfer!.dropEffect = "move";
-                        setDragOverTabId(tab.id);
-                      }}
-                      onDragLeave={() => {
-                        if (dragOverTabId() === tab.id) setDragOverTabId(null);
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDragOverTabId(null);
-                        if (draggedTabId === null || draggedTabId === tab.id) return;
-                        const tabs = project().tabs;
-                        const fromIdx = tabs.findIndex((t) => t.id === draggedTabId);
-                        const toIdx = getIndex();
-                        if (fromIdx !== -1 && fromIdx !== toIdx) {
-                          projectStore.reorderTabs(project().id, fromIdx, toIdx);
-                        }
-                        draggedTabId = null;
+                      onMouseDown={(e) => {
+                        if (e.button !== 0) return;
+                        const startX = e.clientX;
+                        const sourceTabId = tab.id;
+                        let moved = false;
+                        setDraggingTabId(tab.id);
+
+                        const onMove = (me: MouseEvent) => {
+                          if (!moved && Math.abs(me.clientX - startX) < 4) return;
+                          moved = true;
+                          const tabEls = document.querySelectorAll('.app-shell__tab[data-tab-id]');
+                          let overId: string | null = null;
+                          tabEls.forEach((el) => {
+                            const rect = el.getBoundingClientRect();
+                            if (me.clientX >= rect.left && me.clientX <= rect.right) {
+                              overId = el.getAttribute('data-tab-id');
+                            }
+                          });
+                          setDragOverTabId(overId !== sourceTabId ? overId : null);
+                        };
+
+                        const onUp = () => {
+                          document.removeEventListener('mousemove', onMove);
+                          document.removeEventListener('mouseup', onUp);
+                          const targetId = dragOverTabId();
+                          setDragOverTabId(null);
+                          setDraggingTabId(null);
+                          if (moved && targetId && sourceTabId !== targetId) {
+                            const tabs = project().tabs;
+                            const fromIdx = tabs.findIndex((t) => t.id === sourceTabId);
+                            const toIdx = tabs.findIndex((t) => t.id === targetId);
+                            if (fromIdx !== -1 && toIdx !== -1) {
+                              projectStore.reorderTabs(project().id, fromIdx, toIdx);
+                            }
+                            suppressNextClick = true;
+                          }
+                        };
+
+                        document.addEventListener('mousemove', onMove);
+                        document.addEventListener('mouseup', onUp);
                       }}
                     >
                       <Show
