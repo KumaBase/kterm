@@ -47,19 +47,13 @@ impl PtyManager {
             .child_pid()
             .ok_or("Cannot determine process ID")?;
 
-        let output = std::process::Command::new("lsof")
-            .args(["-p", &pid.to_string()])
-            .output()
-            .map_err(|e| format!("Failed to run lsof: {e}"))?;
+        get_process_cwd(pid)
+    }
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines().skip(1) {
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            if fields.len() >= 3 && fields[3] == "cwd" {
-                return Ok(Some(fields[fields.len() - 1].to_string()));
-            }
-        }
-        Ok(None)
+    /// Remove a session from the map without killing (used after natural exit).
+    /// The PtySession's Drop impl will handle cleanup.
+    pub fn remove(&self, session_id: &str) {
+        self.sessions.write().remove(session_id);
     }
 
     pub fn kill(&self, session_id: &str) -> Result<(), String> {
@@ -69,4 +63,39 @@ impl PtyManager {
         }
         Ok(())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn get_process_cwd(pid: u32) -> Result<Option<String>, String> {
+    unsafe {
+        let mut info: libc::proc_vnodepathinfo = std::mem::zeroed();
+        let size = libc::proc_pidinfo(
+            pid as libc::pid_t,
+            libc::PROC_PIDVNODEPATHINFO,
+            0,
+            &mut info as *mut _ as *mut libc::c_void,
+            std::mem::size_of::<libc::proc_vnodepathinfo>() as libc::c_int,
+        );
+        if size <= 0 {
+            return Ok(None);
+        }
+        let path = std::ffi::CStr::from_ptr(info.pvi_cdir.vip_path.as_ptr() as *const libc::c_char);
+        match path.to_str() {
+            Ok(s) if !s.is_empty() => Ok(Some(s.to_string())),
+            _ => Ok(None),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn get_process_cwd(pid: u32) -> Result<Option<String>, String> {
+    let link = std::fs::read_link(format!("/proc/{pid}/cwd"))
+        .map_err(|e| format!("Failed to read /proc/{pid}/cwd: {e}"))?;
+    let path = link.to_string_lossy().to_string();
+    Ok(if path.is_empty() { None } else { Some(path) })
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn get_process_cwd(_pid: u32) -> Result<Option<String>, String> {
+    Ok(None)
 }

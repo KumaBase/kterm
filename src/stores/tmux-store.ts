@@ -197,7 +197,11 @@ export function useTmuxStore() {
   };
 
   const unregisterTmuxTab = (ktermTabId: string) => {
-    setState("tmuxTabs", (prev) => prev.filter((t) => t.ktermTabId !== ktermTabId));
+    setState("tmuxTabs", (prev) => {
+      const remaining = prev.filter((t) => t.ktermTabId !== ktermTabId);
+      if (remaining.length === 0) stopPolling();
+      return remaining;
+    });
   };
 
   /** Get tmux tab state for a kterm tab */

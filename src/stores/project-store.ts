@@ -110,19 +110,24 @@ export function useProjectStore() {
   };
 
   const reorderProjects = (fromIndex: number, toIndex: number) => {
-    setState(produce((s) => {
-      const [item] = s.projects.splice(fromIndex, 1);
-      s.projects.splice(toIndex, 0, item);
-    }));
+    const arr = [...state.projects];
+    const [item] = arr.splice(fromIndex, 1);
+    arr.splice(toIndex, 0, item);
+    setState("projects", arr);
   };
 
   const reorderTabs = (projectId: ProjectId, fromIndex: number, toIndex: number) => {
-    setState(produce((s) => {
-      const project = s.projects.find((p) => p.id === projectId);
-      if (!project) return;
-      const [tab] = project.tabs.splice(fromIndex, 1);
-      project.tabs.splice(toIndex, 0, tab);
-    }));
+    const project = state.projects.find((p) => p.id === projectId);
+    if (!project) return;
+    const arr = [...project.tabs];
+    const [tab] = arr.splice(fromIndex, 1);
+    arr.splice(toIndex, 0, tab);
+    setState(
+      "projects",
+      (p) => p.id === projectId,
+      "tabs",
+      arr,
+    );
   };
 
   const splitPane = (
@@ -204,6 +209,25 @@ export function useProjectStore() {
     }));
   };
 
+  const removePaneBySession = (projectId: ProjectId, tabId: TabId, sessionId: string) => {
+    const project = state.projects.find((p) => p.id === projectId);
+    if (!project) return;
+    const tab = project.tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+
+    const findPaneId = (pane: SplitPane): PaneId | null => {
+      if (pane.sessionId === sessionId) return pane.id;
+      for (const child of pane.children) {
+        const found = findPaneId(child);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    const paneId = findPaneId(tab.rootPane);
+    if (paneId) removePane(projectId, tabId, paneId);
+  };
+
   const toggleExpand = (projectId: ProjectId) => {
     setState(produce((s) => {
       const project = s.projects.find((p) => p.id === projectId);
@@ -238,6 +262,7 @@ export function useProjectStore() {
     updateTabTitle,
     splitPane,
     removePane,
+    removePaneBySession,
     setPaneSession,
     toggleExpand,
     clearAll,

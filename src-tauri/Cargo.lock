@@ -2464,12 +2464,13 @@ dependencies = [
 
 [[package]]
 name = "kt"
-version = "0.2.4"
+version = "0.2.6"
 dependencies = [
  "async-trait",
  "chrono",
  "dirs",
  "fontdb",
+ "libc",
  "parking_lot",
  "portable-pty",
  "russh",

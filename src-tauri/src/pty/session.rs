@@ -107,10 +107,12 @@ impl PtySession {
                         // Flush remaining pending bytes
                         if !pending.is_empty() {
                             let data = String::from_utf8_lossy(&pending).to_string();
-                            let _ = handle.emit("session:output", SessionOutput {
+                            if let Err(e) = handle.emit("session:output", SessionOutput {
                                 session_id: session_id.clone(),
                                 kind: SessionOutputKind::stdout(data),
-                            });
+                            }) {
+                                tracing::debug!("Failed to emit pending flush for {}: {e}", session_id);
+                            }
                         }
                         // Get real exit code from child process
                         let exit_code = {
@@ -124,10 +126,12 @@ impl PtySession {
                                 0
                             }
                         };
-                        let _ = handle.emit("session:output", SessionOutput {
+                        if let Err(e) = handle.emit("session:output", SessionOutput {
                             session_id: session_id.clone(),
                             kind: SessionOutputKind::exited(exit_code),
-                        });
+                        }) {
+                            tracing::debug!("Failed to emit exit for {}: {e}", session_id);
+                        }
                         // Cleanup: unregister session from registry
                         if let Some(state) = handle.try_state::<crate::state::AppState>() {
                             state.sessions.unregister(&session_id);
@@ -147,10 +151,12 @@ impl PtySession {
 
                         let text = String::from_utf8_lossy(&data[..boundary]).to_string();
                         if !text.is_empty() {
-                            let _ = handle.emit("session:output", SessionOutput {
+                            if let Err(e) = handle.emit("session:output", SessionOutput {
                                 session_id: session_id.clone(),
                                 kind: SessionOutputKind::stdout(text),
-                            });
+                            }) {
+                                tracing::debug!("Failed to emit output for {}: {e}", session_id);
+                            }
                         }
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
@@ -160,10 +166,12 @@ impl PtySession {
                         tracing::debug!("PTY read error for {}: {e}", session_id);
                         if !pending.is_empty() {
                             let data = String::from_utf8_lossy(&pending).to_string();
-                            let _ = handle.emit("session:output", SessionOutput {
+                            if let Err(e2) = handle.emit("session:output", SessionOutput {
                                 session_id: session_id.clone(),
                                 kind: SessionOutputKind::stdout(data),
-                            });
+                            }) {
+                                tracing::debug!("Failed to emit pending flush on error for {}: {e2}", session_id);
+                            }
                         }
                         let exit_code = {
                             let mut child_lock = child_reader.lock().unwrap();
@@ -176,10 +184,12 @@ impl PtySession {
                                 1
                             }
                         };
-                        let _ = handle.emit("session:output", SessionOutput {
+                        if let Err(e2) = handle.emit("session:output", SessionOutput {
                             session_id: session_id.clone(),
                             kind: SessionOutputKind::exited(exit_code),
-                        });
+                        }) {
+                            tracing::debug!("Failed to emit exit on error for {}: {e2}", session_id);
+                        }
                         if let Some(state) = handle.try_state::<crate::state::AppState>() {
                             state.sessions.unregister(&session_id);
                         }

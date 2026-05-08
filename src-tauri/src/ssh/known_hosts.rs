@@ -57,7 +57,9 @@ impl KnownHosts {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&self.path, fs::Permissions::from_mode(0o600));
+            if let Err(e) = fs::set_permissions(&self.path, fs::Permissions::from_mode(0o600)) {
+                tracing::warn!("Failed to set permissions on {}: {e}", self.path.display());
+            }
         }
         Ok(())
     }

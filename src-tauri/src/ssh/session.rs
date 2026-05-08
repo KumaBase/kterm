@@ -83,7 +83,9 @@ impl SshSession {
                                         session_id: sid.clone(),
                                         kind: SessionOutputKind::stdout(text),
                                     };
-                                    let _ = handle.emit("session:output", &event);
+                                    if let Err(e) = handle.emit("session:output", &event) {
+                                        tracing::debug!("Failed to emit SSH output for {}: {e}", sid);
+                                    }
                                 }
                             }
                             None => {
@@ -94,13 +96,17 @@ impl SshSession {
                                         session_id: sid.clone(),
                                         kind: SessionOutputKind::stdout(text),
                                     };
-                                    let _ = handle.emit("session:output", &event);
+                                    if let Err(e) = handle.emit("session:output", &event) {
+                                        tracing::debug!("Failed to emit SSH pending flush for {}: {e}", sid);
+                                    }
                                 }
                                 let event = SessionOutputEvent {
                                     session_id: sid.clone(),
                                     kind: SessionOutputKind::exited(0),
                                 };
-                                let _ = handle.emit("session:output", &event);
+                                if let Err(e) = handle.emit("session:output", &event) {
+                                    tracing::debug!("Failed to emit SSH exit for {}: {e}", sid);
+                                }
                                 // Cleanup: unregister session from registry
                                 if let Some(state) = handle.try_state::<crate::state::AppState>() {
                                     state.sessions.unregister(&sid);

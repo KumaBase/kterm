@@ -72,6 +72,7 @@ export function useTerminal(options: UseTerminalOptions) {
   terminal.unicode.activeVersion = "11";
 
   let unlisten: (() => void) | null = null;
+  let contextMenuHandler: ((e: Event) => void) | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let dataDisposable: { dispose: () => void } | null = null;
@@ -168,13 +169,29 @@ export function useTerminal(options: UseTerminalOptions) {
       });
     }
 
+    // Right-click to paste
+    contextMenuHandler = (e: Event) => {
+      e.preventDefault();
+      readText().then((text) => {
+        if (text) terminal.paste(text);
+      }).catch(() => {});
+    };
+    terminalRef.addEventListener("contextmenu", contextMenuHandler);
+
     // Handle session output
     unlisten = await onSessionOutput((payload) => {
       if (payload.session_id !== sessionId) return;
       if (payload.kind.type === "stdout") {
         terminal.write(payload.kind.data);
       } else if (payload.kind.type === "exited") {
-        terminal.write(`\r\n\x1b[90m[Process exited with code ${payload.kind.data}]\x1b[0m\r\n`);
+        const code = payload.kind.data;
+        terminal.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
+        if (code === 0) {
+          terminalRef.dispatchEvent(new CustomEvent("kterm:session-exit", {
+            bubbles: true,
+            detail: { sessionId, code },
+          }));
+        }
       }
     });
 
@@ -194,6 +211,7 @@ export function useTerminal(options: UseTerminalOptions) {
     if (disposed) return;
     disposed = true;
     if (resizeTimer) clearTimeout(resizeTimer);
+    if (contextMenuHandler) terminalRef.removeEventListener("contextmenu", contextMenuHandler);
     resizeObserver?.disconnect();
     dataDisposable?.dispose();
     unlisten?.();

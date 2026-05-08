@@ -1,4 +1,4 @@
-import { onMount, For, Show, createSignal } from "solid-js";
+import { onMount, onCleanup, For, Show, createSignal } from "solid-js";
 import { loadTerminalSettings } from "../stores/terminal-settings-store";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
@@ -29,6 +29,45 @@ export function AppShell() {
   const profileStore = useProfileStore();
   const tmuxStore = useTmuxStore();
 
+  // Cleanup holders for Tauri listeners (registered synchronously)
+  const unlisteners: (() => void)[] = [];
+  onCleanup(() => { for (const fn of unlisteners) fn(); });
+
+  // Auto-close tab when process exits with code 0 (single-pane tabs only)
+  const handleSessionExit = (e: Event) => {
+    const { sessionId } = (e as CustomEvent).detail;
+    for (const proj of projectStore.state.projects) {
+      for (const tab of proj.tabs) {
+        const sessions = collectSessions(tab.rootPane);
+        if (sessions.includes(sessionId)) {
+          if (sessions.length === 1) {
+            // Single pane — close entire tab
+            const tmuxTab = tmuxStore.getTmuxTab(tab.id);
+            if (tmuxTab) {
+              try {
+                if (tmuxTab.isRemote) {
+                  tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName);
+                } else {
+                  tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName);
+                }
+              } catch {}
+              tmuxStore.unregisterTmuxTab(tab.id);
+            }
+            sessionStore.removeSession(sessionId);
+            projectStore.removeTab(proj.id, tab.id);
+          } else {
+            // Multiple panes — remove only the exited pane
+            sessionStore.removeSession(sessionId);
+            projectStore.removePaneBySession(proj.id, tab.id, sessionId);
+          }
+          return;
+        }
+      }
+    }
+  };
+  document.addEventListener("kterm:session-exit", handleSessionExit);
+  onCleanup(() => document.removeEventListener("kterm:session-exit", handleSessionExit));
+
   onMount(async () => {
     await themeStore.initTheme();
     await profileStore.initProfiles();
@@ -53,7 +92,7 @@ export function AppShell() {
           uiStore.showSnippets();
           break;
       }
-    });
+    }).then((unlisten) => unlisteners.push(unlisten));
 
     // Listen for SSH host key verification requests
     listen<{ confirmation_id: string; host: string; key: string }>("ssh:host-key-verify", async (event) => {
@@ -63,7 +102,7 @@ export function AppShell() {
         { title: "SSH Host Key Verification", kind: "warning", okLabel: "Trust", cancelLabel: "Reject" },
       );
       invoke("ssh_confirm_host_key", { confirmationId: confirmation_id, confirmed });
-    });
+    }).then((unlisten) => unlisteners.push(unlisten));
 
     // Try to restore existing sessions from the backend
     const existing = await sessionStore.restoreFromBackend();
@@ -103,31 +142,39 @@ export function AppShell() {
     const tab = projectStore.addTab(project.id);
     let session;
 
-    // Inherit cwd from active tab's session
-    let inheritedCwd: string | undefined;
-    const activeTab = projectStore.activeTab();
-    if (activeTab) {
-      const sid = collectSessions(activeTab.rootPane)[0];
-      if (sid) {
-        try { inheritedCwd = (await sessionGetCwd(sid)) ?? undefined; } catch {}
+    try {
+      // Inherit cwd from active tab's session
+      let inheritedCwd: string | undefined;
+      const activeTab = projectStore.activeTab();
+      if (activeTab) {
+        const sid = collectSessions(activeTab.rootPane)[0];
+        if (sid) {
+          try { inheritedCwd = (await sessionGetCwd(sid)) ?? undefined; } catch {}
+        }
       }
+
+      const profile = profileId
+        ? profileStore.getProfile(profileId)
+        : profileStore.getDefaultProfile();
+
+      if (profile) {
+        const cwd = profile.cwd || inheritedCwd;
+        const env = profile.env.length > 0 ? profile.env as [string, string][] : undefined;
+        const args = profile.args.length > 0 ? profile.args : undefined;
+        session = await sessionStore.createSession(profile.shell, args, cwd, env);
+      } else {
+        session = await sessionStore.createSession(undefined, undefined, inheritedCwd);
+      }
+
+      projectStore.setPaneSession(project.id, tab.id, tab.rootPane.id, session.id);
+      syncActiveSession();
+    } catch (e) {
+      console.error("Failed to create session:", e);
+      ask(`Failed to create terminal session:\n${e}`, {
+        title: "Session Error", kind: "error", okLabel: "OK",
+      }).catch(() => {});
+      projectStore.removeTab(project.id, tab.id);
     }
-
-    const profile = profileId
-      ? profileStore.getProfile(profileId)
-      : profileStore.getDefaultProfile();
-
-    if (profile) {
-      const cwd = profile.cwd || inheritedCwd;
-      const env = profile.env.length > 0 ? profile.env as [string, string][] : undefined;
-      const args = profile.args.length > 0 ? profile.args : undefined;
-      session = await sessionStore.createSession(profile.shell, args, cwd, env);
-    } else {
-      session = await sessionStore.createSession(undefined, undefined, inheritedCwd);
-    }
-
-    projectStore.setPaneSession(project.id, tab.id, tab.rootPane.id, session.id);
-    syncActiveSession();
   };
 
   // Open a new tab that attaches to a local tmux session
@@ -222,6 +269,9 @@ export function AppShell() {
       handleSshConnected(sessionInfo);
     } catch (e: any) {
       console.error("SSH config connect failed:", e);
+      ask(`SSH connection failed:\n${e}`, {
+        title: "SSH Error", kind: "error", okLabel: "OK",
+      }).catch(() => {});
     }
   };
 

@@ -29,11 +29,8 @@ export function useSessionStore() {
   };
 
   const removeSession = async (sessionId: string) => {
-    try {
-      await killSession(sessionId);
-    } catch (e) {
-      console.error("Failed to kill session:", e);
-    }
+    // Backend may already be gone (natural exit) — that's fine
+    try { await killSession(sessionId); } catch {}
     const sessions = { ...state.sessions };
     delete sessions[sessionId];
     setState("sessions", sessions);

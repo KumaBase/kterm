@@ -30,6 +30,7 @@ export function XtermAdapter(props: XtermAdapterProps) {
       const t = useTerminal({
         terminalRef: containerRef,
         sessionId: props.sessionId,
+        settings: settings(),
       });
       terminalRef = t;
       await t.init();

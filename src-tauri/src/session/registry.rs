@@ -71,10 +71,20 @@ impl SessionRegistry {
     pub fn unregister(&self, session_id: &str) {
         let removed = {
             let mut sessions = self.sessions.write();
-            sessions.remove(session_id).is_some()
+            sessions.remove(session_id)
         };
-        if removed {
+        if let Some(info) = removed {
             self.reserved.fetch_sub(1, Ordering::Release);
+            // Also remove from the backend manager map to prevent leaks
+            match info.kind {
+                SessionKind::Pty => self.pty_manager.remove(session_id),
+                SessionKind::Ssh { .. } => {
+                    // SSH manager is async — spawn a task to clean up
+                    let mgr = self.ssh_manager.clone();
+                    let sid = session_id.to_string();
+                    tokio::spawn(async move { mgr.remove(&sid).await; });
+                }
+            }
         }
     }
 
@@ -112,7 +122,8 @@ impl SessionRegistry {
         }
     }
 
-    /// Route kill to the correct backend, also unregisters the session
+    /// Route kill to the correct backend, also unregisters the session.
+    /// Idempotent: returns Ok if session is already gone.
     pub async fn kill(&self, session_id: &str) -> Result<(), String> {
         let kind = self.sessions.read().get(session_id).map(|s| s.kind.clone());
         match kind {
@@ -122,7 +133,7 @@ impl SessionRegistry {
             Some(SessionKind::Ssh { .. }) => {
                 self.ssh_manager.disconnect(session_id).await?;
             }
-            None => return Err(format!("Session not found: {session_id}")),
+            None => return Ok(()),
         }
         self.unregister(session_id);
         Ok(())

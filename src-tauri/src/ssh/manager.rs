@@ -6,6 +6,7 @@ use crate::ssh::auth::HostKeyConfirmations;
 use crate::ssh::session::SshSession;
 use crate::ssh::types::SshConnectParams;
 
+#[derive(Clone)]
 pub struct SshManager {
     sessions: Arc<RwLock<HashMap<String, Arc<SshSession>>>>,
 }
@@ -43,6 +44,11 @@ impl SshManager {
             .get(session_id)
             .ok_or_else(|| format!("SSH session not found: {session_id}"))?;
         session.resize(cols, rows).await
+    }
+
+    /// Remove a session from the map without disconnecting (used after natural exit).
+    pub async fn remove(&self, session_id: &str) {
+        self.sessions.write().await.remove(session_id);
     }
 
     pub async fn disconnect(&self, session_id: &str) -> Result<(), String> {

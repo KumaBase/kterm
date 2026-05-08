@@ -99,7 +99,9 @@ impl russh::client::Handler for SshAuth {
                     host: self.host_key_id.clone(),
                     key: key_str.clone(),
                 };
-                let _ = self.app_handle.emit("ssh:host-key-verify", &payload);
+                if let Err(e) = self.app_handle.emit("ssh:host-key-verify", &payload) {
+                    tracing::warn!("Failed to emit host-key-verify for {}: {e}", self.host_key_id);
+                }
 
                 // Wait for user response (with 60s timeout)
                 let confirmed = tokio::time::timeout(
@@ -140,7 +142,9 @@ impl russh::client::Handler for SshAuth {
     ) -> Result<(), Self::Error> {
         let shell_id = self.shell_channel.lock();
         if shell_id.map_or(false, |id| id == channel) {
-            let _ = self.output_tx.send(data.to_vec());
+            if let Err(e) = self.output_tx.send(data.to_vec()) {
+                tracing::debug!("Failed to send data to output channel: {e}");
+            }
         }
         Ok(())
     }
@@ -154,7 +158,9 @@ impl russh::client::Handler for SshAuth {
     ) -> Result<(), Self::Error> {
         let shell_id = self.shell_channel.lock();
         if shell_id.map_or(false, |id| id == channel) {
-            let _ = self.output_tx.send(data.to_vec());
+            if let Err(e) = self.output_tx.send(data.to_vec()) {
+                tracing::debug!("Failed to send extended data to output channel: {e}");
+            }
         }
         Ok(())
     }
