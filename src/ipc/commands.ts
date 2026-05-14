@@ -69,6 +69,7 @@ export interface AppConfig {
   theme: Theme;
   terminal: TerminalSettings;
   window: WindowSettings;
+  terminal_color_theme: string;
 }
 
 export type Theme = "Dark" | "Light" | "System";

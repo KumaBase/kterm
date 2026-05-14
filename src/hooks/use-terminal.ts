@@ -5,7 +5,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { sessionWrite, sessionResize } from "../ipc/commands";
 import { onSessionOutput } from "../ipc/events";
-import { getTerminalTheme } from "../themes/terminal-themes";
+import { BUILT_IN_THEMES } from "../themes/terminal-themes";
 import type { TerminalSettings } from "../ipc/commands";
 import "@xterm/xterm/css/xterm.css";
 
@@ -16,6 +16,7 @@ interface UseTerminalOptions {
   terminalRef: HTMLElement;
   sessionId: string;
   settings?: Partial<TerminalSettings>;
+  onTitleChange?: (title: string) => void;
 }
 
 let fontsLoaded = false;
@@ -42,15 +43,38 @@ async function ensureFontsLoaded(): Promise<void> {
   }
 }
 
-function getEffectiveTheme(): "dark" | "light" {
+function getDefaultTheme() {
   const attr = document.documentElement.getAttribute("data-theme");
-  return attr === "light" ? "light" : "dark";
+  const id = attr === "light" ? "builtin:tokyo-night-light" : "builtin:tokyo-night-dark";
+  const theme = BUILT_IN_THEMES.find((t) => t.id === id) ?? BUILT_IN_THEMES[0];
+  return {
+    background: theme.background,
+    foreground: theme.foreground,
+    cursor: theme.cursor,
+    selectionBackground: theme.selection_background,
+    black: theme.black,
+    red: theme.red,
+    green: theme.green,
+    yellow: theme.yellow,
+    blue: theme.blue,
+    magenta: theme.magenta,
+    cyan: theme.cyan,
+    white: theme.white,
+    brightBlack: theme.bright_black,
+    brightRed: theme.bright_red,
+    brightGreen: theme.bright_green,
+    brightYellow: theme.bright_yellow,
+    brightBlue: theme.bright_blue,
+    brightMagenta: theme.bright_magenta,
+    brightCyan: theme.bright_cyan,
+    brightWhite: theme.bright_white,
+  };
 }
 
 export function useTerminal(options: UseTerminalOptions) {
   const { terminalRef, sessionId } = options;
 
-  const effectiveTheme = getEffectiveTheme();
+  const effectiveTheme = getDefaultTheme();
 
   const terminal = new Terminal({
     allowProposedApi: true,
@@ -61,7 +85,7 @@ export function useTerminal(options: UseTerminalOptions) {
     cursorStyle: (options.settings?.cursor_style as any) || "block",
     lineHeight: options.settings?.line_height ?? 1.2,
     letterSpacing: options.settings?.letter_spacing ?? 0,
-    theme: getTerminalTheme(effectiveTheme),
+    theme: effectiveTheme,
   });
 
   const fitAddon = new FitAddon();
@@ -76,6 +100,7 @@ export function useTerminal(options: UseTerminalOptions) {
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let dataDisposable: { dispose: () => void } | null = null;
+  let titleDisposable: { dispose: () => void } | null = null;
   let webglAddon: WebglAddon | null = null;
   let disposed = false;
 
@@ -178,6 +203,13 @@ export function useTerminal(options: UseTerminalOptions) {
     };
     terminalRef.addEventListener("contextmenu", contextMenuHandler);
 
+    // Title change (OSC 0/2)
+    if (options.onTitleChange) {
+      titleDisposable = terminal.onTitleChange((title) => {
+        options.onTitleChange!(title);
+      });
+    }
+
     // Handle session output
     unlisten = await onSessionOutput((payload) => {
       if (payload.session_id !== sessionId) return;
@@ -214,6 +246,7 @@ export function useTerminal(options: UseTerminalOptions) {
     if (contextMenuHandler) terminalRef.removeEventListener("contextmenu", contextMenuHandler);
     resizeObserver?.disconnect();
     dataDisposable?.dispose();
+    titleDisposable?.dispose();
     unlisten?.();
     webglAddon?.dispose();
     terminal.dispose();

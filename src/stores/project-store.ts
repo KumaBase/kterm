@@ -110,24 +110,19 @@ export function useProjectStore() {
   };
 
   const reorderProjects = (fromIndex: number, toIndex: number) => {
-    const arr = [...state.projects];
-    const [item] = arr.splice(fromIndex, 1);
-    arr.splice(toIndex, 0, item);
-    setState("projects", arr);
+    setState(produce((s) => {
+      const [item] = s.projects.splice(fromIndex, 1);
+      s.projects.splice(toIndex, 0, item);
+    }));
   };
 
   const reorderTabs = (projectId: ProjectId, fromIndex: number, toIndex: number) => {
-    const project = state.projects.find((p) => p.id === projectId);
-    if (!project) return;
-    const arr = [...project.tabs];
-    const [tab] = arr.splice(fromIndex, 1);
-    arr.splice(toIndex, 0, tab);
-    setState(
-      "projects",
-      (p) => p.id === projectId,
-      "tabs",
-      arr,
-    );
+    setState(produce((s) => {
+      const project = s.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      const [tab] = project.tabs.splice(fromIndex, 1);
+      project.tabs.splice(toIndex, 0, tab);
+    }));
   };
 
   const splitPane = (

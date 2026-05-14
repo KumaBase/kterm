@@ -1,26 +1,21 @@
 import { onMount, onCleanup, createEffect } from "solid-js";
 import { useTerminal } from "../../hooks/use-terminal";
 import { useTerminalSettingsStore } from "../../stores/terminal-settings-store";
-import { getTerminalTheme, getTerminalBackground } from "../../themes/terminal-themes";
+import { useColorThemeStore } from "../../stores/color-theme-store";
 
 interface XtermAdapterProps {
   sessionId: string;
-}
-
-function getEffectiveTheme(): "dark" | "light" {
-  const attr = document.documentElement.getAttribute("data-theme");
-  return attr === "light" ? "light" : "dark";
+  onTitleChange?: (title: string) => void;
 }
 
 export function XtermAdapter(props: XtermAdapterProps) {
   let containerRef!: HTMLDivElement;
   const { settings } = useTerminalSettingsStore();
+  const colorThemeStore = useColorThemeStore();
 
   let terminalRef: ReturnType<typeof useTerminal> | null = null;
-  let themeObserver: MutationObserver | null = null;
 
   onCleanup(() => {
-    themeObserver?.disconnect();
     terminalRef?.dispose();
     terminalRef = null;
   });
@@ -31,16 +26,17 @@ export function XtermAdapter(props: XtermAdapterProps) {
         terminalRef: containerRef,
         sessionId: props.sessionId,
         settings: settings(),
+        onTitleChange: props.onTitleChange,
       });
       terminalRef = t;
       await t.init();
       if (terminalRef !== t) return;
 
-      // Apply initial padding
-      const padding = settings().padding;
-      containerRef.style.padding = `${padding}px`;
+      // Apply initial padding and background
+      const padding = settings();
+      containerRef.style.padding = `${padding.padding}px`;
       containerRef.style.boxSizing = "border-box";
-      containerRef.style.backgroundColor = getTerminalBackground(getEffectiveTheme());
+      containerRef.style.backgroundColor = colorThemeStore.activeBackground();
       t.fit();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -53,24 +49,13 @@ export function XtermAdapter(props: XtermAdapterProps) {
       containerRef.style.fontSize = "13px";
       return;
     }
-
-    // Watch for theme attribute changes via MutationObserver
-    themeObserver = new MutationObserver(() => {
-      if (terminalRef) {
-        const theme = getEffectiveTheme();
-        terminalRef.terminal.options.theme = getTerminalTheme(theme);
-        containerRef.style.backgroundColor = getTerminalBackground(theme);
-      }
-    });
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
   });
 
-  // Reactive settings updates
+  // Reactive: update terminal when settings or color theme changes
   createEffect(() => {
     const s = settings();
+    const xtermTheme = colorThemeStore.activeXtermTheme();
+    const bgColor = colorThemeStore.activeBackground();
     if (!terminalRef) return;
     const { terminal } = terminalRef;
 
@@ -81,10 +66,10 @@ export function XtermAdapter(props: XtermAdapterProps) {
     terminal.options.scrollback = s.scrollback;
     terminal.options.cursorStyle = s.cursor_style as any;
     terminal.options.cursorBlink = s.cursor_blink;
-    terminal.options.theme = getTerminalTheme(getEffectiveTheme());
+    terminal.options.theme = xtermTheme;
 
     containerRef.style.padding = `${s.padding}px`;
-    containerRef.style.backgroundColor = getTerminalBackground(getEffectiveTheme());
+    containerRef.style.backgroundColor = bgColor;
     terminalRef.fit();
   });
 

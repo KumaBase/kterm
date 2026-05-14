@@ -4,6 +4,7 @@ import "./TerminalPane.css";
 
 interface TerminalPaneProps {
   sessionId?: string;
+  onTitleChange?: (sessionId: string, title: string) => void;
 }
 
 export function TerminalPane(props: TerminalPaneProps) {
@@ -17,7 +18,7 @@ export function TerminalPane(props: TerminalPaneProps) {
           </div>
         }
       >
-        <XtermAdapter sessionId={props.sessionId!} />
+        <XtermAdapter sessionId={props.sessionId!} onTitleChange={(title) => props.onTitleChange?.(props.sessionId!, title)} />
       </Show>
     </div>
   );

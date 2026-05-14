@@ -4,5 +4,6 @@ pub mod font;
 pub mod profiles;
 pub mod pty;
 pub mod snippets;
+pub mod color_themes;
 pub mod ssh;
 pub mod tmux;

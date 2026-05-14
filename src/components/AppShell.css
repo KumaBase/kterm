@@ -36,6 +36,7 @@
   border-right: 1px solid var(--border-color);
   font-size: 13px;
   white-space: nowrap;
+  user-select: none;
   transition: background-color 0.15s, color 0.15s;
 }
 
@@ -142,6 +143,20 @@
 }
 
 .app-shell__content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.app-shell__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.app-shell__body {
   flex: 1;
   display: flex;
   overflow: hidden;

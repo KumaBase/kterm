@@ -364,213 +364,24 @@ export function AppShell() {
     return sessions;
   };
 
+  const findSessionInPane = (pane: any, sessionId: string): boolean => {
+    if (pane.sessionId === sessionId) return true;
+    return pane.children.some((child: any) => findSessionInPane(child, sessionId));
+  };
+
+  const handleTitleChange = (sessionId: string, title: string) => {
+    for (const proj of projectStore.state.projects) {
+      for (const tab of proj.tabs) {
+        if (findSessionInPane(tab.rootPane, sessionId)) {
+          projectStore.updateTabTitle(proj.id, tab.id, title);
+          return;
+        }
+      }
+    }
+  };
+
   return (
     <div class="app-shell">
-      <div class="app-shell__tabbar">
-        <button
-          class={`app-shell__tabbar-icon-btn ${uiStore.state.sidebarVisible ? "app-shell__tabbar-icon-btn--active" : ""}`}
-          onClick={() => uiStore.toggleSidebar()}
-          title="Toggle Sidebar (Cmd+B)"
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="1" y="1" width="14" height="14" rx="2" />
-            <line x1="5.5" y1="1" x2="5.5" y2="15" />
-          </svg>
-        </button>
-        <div class="app-shell__tabbar-tabs">
-          <Show
-            when={activeTab() && tmuxStore.getTmuxTab(activeTab()!.id)}
-          >
-            {/* tmux window tabs — active tab is in tmux mode */}
-            <For each={tmuxStore.getTmuxTab(activeTab()!.id)!.windows}>
-              {(win) => (
-                <div
-                  class={`app-shell__tab ${win.active ? "app-shell__tab--active" : ""}`}
-                  onClick={() => {
-                    const t = tmuxStore.getTmuxTab(activeTab()!.id);
-                    if (t) tmuxStore.selectWindow(t.tmuxSessionName, win.index);
-                  }}
-                >
-                  <span class="app-shell__tab-title">{win.name}</span>
-                  <button
-                    class="app-shell__tab-close"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const t = tmuxStore.getTmuxTab(activeTab()!.id);
-                      if (t) tmuxStore.killWindow(t.tmuxSessionName, win.index);
-                    }}
-                    title="Close window"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-            </For>
-            <button
-              class="app-shell__tabbar-new"
-              onClick={() => {
-                const t = tmuxStore.getTmuxTab(activeTab()!.id);
-                if (t) tmuxStore.createWindow(t.tmuxSessionName);
-              }}
-              title="New tmux window"
-            >
-              +
-            </button>
-          </Show>
-          {/* Show this when active tab is NOT in tmux mode */}
-          <Show when={!activeTab() || !tmuxStore.getTmuxTab(activeTab()!.id)}>
-            <Show when={activeProject()}>
-              {(project) => (
-                <For each={project().tabs}>
-                  {(tab, getIndex) => (
-                    <div
-                      class={`app-shell__tab ${project().activeTabId === tab.id ? "app-shell__tab--active" : ""} ${dragOverTabId() === tab.id ? "app-shell__tab--drag-over" : ""} ${draggingTabId() === tab.id ? "app-shell__tab--dragging" : ""}`}
-                      data-tab-id={tab.id}
-                      onClick={() => {
-                        if (suppressNextClick) { suppressNextClick = false; return; }
-                        projectStore.setActiveTab(project().id, tab.id);
-                        syncActiveSession();
-                      }}
-                      onMouseDown={(e) => {
-                        if (e.button !== 0) return;
-                        const startX = e.clientX;
-                        const sourceTabId = tab.id;
-                        let moved = false;
-                        setDraggingTabId(tab.id);
-
-                        const onMove = (me: MouseEvent) => {
-                          if (!moved && Math.abs(me.clientX - startX) < 4) return;
-                          moved = true;
-                          const tabEls = document.querySelectorAll('.app-shell__tab[data-tab-id]');
-                          let overId: string | null = null;
-                          tabEls.forEach((el) => {
-                            const rect = el.getBoundingClientRect();
-                            if (me.clientX >= rect.left && me.clientX <= rect.right) {
-                              overId = el.getAttribute('data-tab-id');
-                            }
-                          });
-                          setDragOverTabId(overId !== sourceTabId ? overId : null);
-                        };
-
-                        const onUp = () => {
-                          document.removeEventListener('mousemove', onMove);
-                          document.removeEventListener('mouseup', onUp);
-                          const targetId = dragOverTabId();
-                          setDragOverTabId(null);
-                          setDraggingTabId(null);
-                          if (moved && targetId && sourceTabId !== targetId) {
-                            const tabs = project().tabs;
-                            const fromIdx = tabs.findIndex((t) => t.id === sourceTabId);
-                            const toIdx = tabs.findIndex((t) => t.id === targetId);
-                            if (fromIdx !== -1 && toIdx !== -1) {
-                              projectStore.reorderTabs(project().id, fromIdx, toIdx);
-                            }
-                            suppressNextClick = true;
-                          }
-                        };
-
-                        document.addEventListener('mousemove', onMove);
-                        document.addEventListener('mouseup', onUp);
-                      }}
-                    >
-                      <Show
-                        when={editingTabId() === tab.id}
-                        fallback={
-                          <span
-                            class="app-shell__tab-title"
-                            onDblClick={(e) => {
-                              e.stopPropagation();
-                              startTabEdit(tab.id);
-                            }}
-                          >
-                            {tab.title}
-                          </span>
-                        }
-                      >
-                        <input
-                          ref={tabEditRef}
-                          class="app-shell__tab-edit"
-                          value={tab.title}
-                          onClick={(e) => e.stopPropagation()}
-                          onBlur={() => commitTabEdit(project().id, tab.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitTabEdit(project().id, tab.id);
-                            if (e.key === "Escape") setEditingTabId(null);
-                          }}
-                        />
-                      </Show>
-                      <button
-                        class="app-shell__tab-close"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const tmuxTab = tmuxStore.getTmuxTab(tab.id);
-                          if (tmuxTab) {
-                            if (tmuxTab.isRemote) {
-                              tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName).catch(() => {});
-                            } else {
-                              tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName).catch(() => {});
-                            }
-                            tmuxStore.unregisterTmuxTab(tab.id);
-                          }
-                          const sessions = collectSessions(tab.rootPane);
-                          sessions.forEach((s) => sessionStore.removeSession(s));
-                          projectStore.removeTab(project().id, tab.id);
-                        }}
-                        title="Close tab"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
-                </For>
-              )}
-            </Show>
-            <div class="app-shell__tabbar-new-wrapper">
-              <button class="app-shell__tabbar-new" onClick={() => handleNewTab()} title="New Tab (Cmd+T)">
-                +
-              </button>
-              <button
-                class="app-shell__tabbar-new-chevron"
-                onClick={() => setProfileDropdownOpen(!profileDropdownOpen())}
-                title="New Tab with Profile"
-              >
-                ▾
-              </button>
-              <Show when={profileDropdownOpen()}>
-                <div class="app-shell__profile-dropdown" onClick={(e) => e.stopPropagation()}>
-                  <For each={profileStore.state.profiles}>
-                    {(profile) => (
-                      <button
-                        class={`app-shell__profile-dropdown-item ${profileStore.state.defaultProfileId === profile.id ? "app-shell__profile-dropdown-item--default" : ""}`}
-                        onClick={() => { handleNewTab(profile.id); setProfileDropdownOpen(false); }}
-                      >
-                        {profile.name}
-                        <Show when={profileStore.state.defaultProfileId === profile.id}>
-                          <span class="app-shell__profile-dropdown-star">★</span>
-                        </Show>
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </Show>
-            </div>
-          </Show>
-        </div>
-        <div class="app-shell__tabbar-actions">
-          <button
-            class={`app-shell__tabbar-icon-btn ${uiStore.state.rightSidebarVisible ? "app-shell__tabbar-icon-btn--active" : ""}`}
-            onClick={() => uiStore.toggleRightSidebar()}
-            title="Toggle Panel (Cmd+Shift+S)"
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-              <rect x="2" y="1" width="12" height="14" rx="2" />
-              <line x1="5" y1="4" x2="11" y2="4" />
-              <line x1="5" y1="7" x2="11" y2="7" />
-              <line x1="5" y1="10" x2="9" y2="10" />
-            </svg>
-          </button>
-        </div>
-      </div>
       <div class="app-shell__content">
         <Show when={uiStore.state.sidebarVisible}>
           <ProjectSidebar
@@ -580,62 +391,272 @@ export function AppShell() {
             onRemoteTmuxAttach={handleRemoteTmuxAttach}
           />
         </Show>
-        <div class="app-shell__terminal-area">
-          <For each={projectStore.state.projects}>
-            {(project) => (
-              <For each={project.tabs}>
-                {(tab) => {
-                  const isActive = () =>
-                    projectStore.state.activeProjectId === project.id &&
-                    project.activeTabId === tab.id;
-                  return (
+        <div class="app-shell__main">
+          <div class="app-shell__tabbar">
+            <button
+              class={`app-shell__tabbar-icon-btn ${uiStore.state.sidebarVisible ? "app-shell__tabbar-icon-btn--active" : ""}`}
+              onClick={() => uiStore.toggleSidebar()}
+              title="Toggle Sidebar (Cmd+B)"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="1" y="1" width="14" height="14" rx="2" />
+                <line x1="5.5" y1="1" x2="5.5" y2="15" />
+              </svg>
+            </button>
+            <div class="app-shell__tabbar-tabs">
+              <Show
+                when={activeTab() && tmuxStore.getTmuxTab(activeTab()!.id)}
+              >
+                {/* tmux window tabs — active tab is in tmux mode */}
+                <For each={tmuxStore.getTmuxTab(activeTab()!.id)!.windows}>
+                  {(win) => (
                     <div
-                      class="app-shell__terminal-layer"
-                      style={{
-                        visibility: isActive() ? "visible" : "hidden",
-                        "pointer-events": isActive() ? "auto" : "none",
+                      class={`app-shell__tab ${win.active ? "app-shell__tab--active" : ""}`}
+                      onClick={() => {
+                        const t = tmuxStore.getTmuxTab(activeTab()!.id);
+                        if (t) tmuxStore.selectWindow(t.tmuxSessionName, win.index);
                       }}
                     >
-                      <TerminalContainer rootPane={tab.rootPane} />
+                      <span class="app-shell__tab-title">{win.name}</span>
+                      <button
+                        class="app-shell__tab-close"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const t = tmuxStore.getTmuxTab(activeTab()!.id);
+                          if (t) tmuxStore.killWindow(t.tmuxSessionName, win.index);
+                        }}
+                        title="Close window"
+                      >
+                        ×
+                      </button>
                     </div>
-                  );
-                }}
-              </For>
-            )}
-          </For>
-          <Show when={!activeProject() || (activeProject() && activeProject()!.tabs.length === 0)}>
-            <div class="app-shell__placeholder">
-              <p>No terminal session</p>
-              <p class="app-shell__placeholder-hint">Press + to open a new terminal</p>
-            </div>
-          </Show>
-        </div>
-        <Show when={uiStore.state.rightSidebarVisible}>
-          <div class="app-shell__right-sidebar">
-            <div class="app-shell__right-sidebar-tabs">
-              <button
-                class={`app-shell__right-sidebar-tab ${uiStore.state.rightSidebarTab === "snippets" ? "app-shell__right-sidebar-tab--active" : ""}`}
-                onClick={() => uiStore.showSnippets()}
-              >
-                Snippets
-              </button>
-              <button
-                class={`app-shell__right-sidebar-tab ${uiStore.state.rightSidebarTab === "hosts" ? "app-shell__right-sidebar-tab--active" : ""}`}
-                onClick={() => uiStore.showHosts()}
-              >
-                Hosts
-              </button>
-            </div>
-            <div class="app-shell__right-sidebar-content">
-              <Show when={uiStore.state.rightSidebarTab === "snippets"}>
-                <SnippetPanel />
+                  )}
+                </For>
+                <button
+                  class="app-shell__tabbar-new"
+                  onClick={() => {
+                    const t = tmuxStore.getTmuxTab(activeTab()!.id);
+                    if (t) tmuxStore.createWindow(t.tmuxSessionName);
+                  }}
+                  title="New tmux window"
+                >
+                  +
+                </button>
               </Show>
-              <Show when={uiStore.state.rightSidebarTab === "hosts"}>
-                <SshHostPanel onConnect={handleSshConfigConnect} />
+              {/* Show this when active tab is NOT in tmux mode */}
+              <Show when={!activeTab() || !tmuxStore.getTmuxTab(activeTab()!.id)}>
+                <Show when={activeProject()}>
+                  {(project) => (
+                    <For each={project().tabs}>
+                      {(tab, getIndex) => (
+                        <div
+                          class={`app-shell__tab ${project().activeTabId === tab.id ? "app-shell__tab--active" : ""} ${dragOverTabId() === tab.id ? "app-shell__tab--drag-over" : ""} ${draggingTabId() === tab.id ? "app-shell__tab--dragging" : ""}`}
+                          data-tab-id={tab.id}
+                          onClick={() => {
+                            if (suppressNextClick) { suppressNextClick = false; return; }
+                            projectStore.setActiveTab(project().id, tab.id);
+                            syncActiveSession();
+                          }}
+                          onMouseDown={(e) => {
+                            if (e.button !== 0) return;
+                            e.preventDefault();
+                            const startX = e.clientX;
+                            const sourceTabId = tab.id;
+                            let moved = false;
+                            setDraggingTabId(tab.id);
+
+                            const onMove = (me: MouseEvent) => {
+                              if (!moved && Math.abs(me.clientX - startX) < 4) return;
+                              moved = true;
+                              const tabEls = document.querySelectorAll('.app-shell__tab[data-tab-id]');
+                              let overId: string | null = null;
+                              tabEls.forEach((el) => {
+                                const rect = el.getBoundingClientRect();
+                                if (me.clientX >= rect.left && me.clientX <= rect.right) {
+                                  overId = el.getAttribute('data-tab-id');
+                                }
+                              });
+                              setDragOverTabId(overId !== sourceTabId ? overId : null);
+                            };
+
+                            const onUp = () => {
+                              document.removeEventListener('mousemove', onMove);
+                              document.removeEventListener('mouseup', onUp);
+                              const targetId = dragOverTabId();
+                              setDragOverTabId(null);
+                              setDraggingTabId(null);
+                              if (moved && targetId && sourceTabId !== targetId) {
+                                const tabs = project().tabs;
+                                const fromIdx = tabs.findIndex((t) => t.id === sourceTabId);
+                                const toIdx = tabs.findIndex((t) => t.id === targetId);
+                                if (fromIdx !== -1 && toIdx !== -1) {
+                                  projectStore.reorderTabs(project().id, fromIdx, toIdx);
+                                }
+                                suppressNextClick = true;
+                              }
+                            };
+
+                            document.addEventListener('mousemove', onMove);
+                            document.addEventListener('mouseup', onUp);
+                          }}
+                        >
+                          <Show
+                            when={editingTabId() === tab.id}
+                            fallback={
+                              <span
+                                class="app-shell__tab-title"
+                                onDblClick={(e) => {
+                                  e.stopPropagation();
+                                  startTabEdit(tab.id);
+                                }}
+                              >
+                                {tab.title}
+                              </span>
+                            }
+                          >
+                            <input
+                              ref={tabEditRef}
+                              class="app-shell__tab-edit"
+                              value={tab.title}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={() => commitTabEdit(project().id, tab.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") commitTabEdit(project().id, tab.id);
+                                if (e.key === "Escape") setEditingTabId(null);
+                              }}
+                            />
+                          </Show>
+                          <button
+                            class="app-shell__tab-close"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const tmuxTab = tmuxStore.getTmuxTab(tab.id);
+                              if (tmuxTab) {
+                                if (tmuxTab.isRemote) {
+                                  tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName).catch(() => {});
+                                } else {
+                                  tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName).catch(() => {});
+                                }
+                                tmuxStore.unregisterTmuxTab(tab.id);
+                              }
+                              const sessions = collectSessions(tab.rootPane);
+                              sessions.forEach((s) => sessionStore.removeSession(s));
+                              projectStore.removeTab(project().id, tab.id);
+                            }}
+                            title="Close tab"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  )}
+                </Show>
+                <div class="app-shell__tabbar-new-wrapper">
+                  <button class="app-shell__tabbar-new" onClick={() => handleNewTab()} title="New Tab (Cmd+T)">
+                    +
+                  </button>
+                  <button
+                    class="app-shell__tabbar-new-chevron"
+                    onClick={() => setProfileDropdownOpen(!profileDropdownOpen())}
+                    title="New Tab with Profile"
+                  >
+                    ▾
+                  </button>
+                  <Show when={profileDropdownOpen()}>
+                    <div class="app-shell__profile-dropdown" onClick={(e) => e.stopPropagation()}>
+                      <For each={profileStore.state.profiles}>
+                        {(profile) => (
+                          <button
+                            class={`app-shell__profile-dropdown-item ${profileStore.state.defaultProfileId === profile.id ? "app-shell__profile-dropdown-item--default" : ""}`}
+                            onClick={() => { handleNewTab(profile.id); setProfileDropdownOpen(false); }}
+                          >
+                            {profile.name}
+                            <Show when={profileStore.state.defaultProfileId === profile.id}>
+                              <span class="app-shell__profile-dropdown-star">★</span>
+                            </Show>
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
               </Show>
+            </div>
+            <div class="app-shell__tabbar-actions">
+              <button
+                class={`app-shell__tabbar-icon-btn ${uiStore.state.rightSidebarVisible ? "app-shell__tabbar-icon-btn--active" : ""}`}
+                onClick={() => uiStore.toggleRightSidebar()}
+                title="Toggle Panel (Cmd+Shift+S)"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="2" y="1" width="12" height="14" rx="2" />
+                  <line x1="5" y1="4" x2="11" y2="4" />
+                  <line x1="5" y1="7" x2="11" y2="7" />
+                  <line x1="5" y1="10" x2="9" y2="10" />
+                </svg>
+              </button>
             </div>
           </div>
-        </Show>
+          <div class="app-shell__body">
+            <div class="app-shell__terminal-area">
+              <For each={projectStore.state.projects}>
+                {(project) => (
+                  <For each={project.tabs}>
+                    {(tab) => {
+                      const isActive = () =>
+                        projectStore.state.activeProjectId === project.id &&
+                        project.activeTabId === tab.id;
+                      return (
+                        <div
+                          class="app-shell__terminal-layer"
+                          style={{
+                            visibility: isActive() ? "visible" : "hidden",
+                            "pointer-events": isActive() ? "auto" : "none",
+                          }}
+                        >
+                          <TerminalContainer rootPane={tab.rootPane} onTitleChange={handleTitleChange} />
+                        </div>
+                      );
+                    }}
+                  </For>
+                )}
+              </For>
+              <Show when={!activeProject() || (activeProject() && activeProject()!.tabs.length === 0)}>
+                <div class="app-shell__placeholder">
+                  <p>No terminal session</p>
+                  <p class="app-shell__placeholder-hint">Press + to open a new terminal</p>
+                </div>
+              </Show>
+            </div>
+            <Show when={uiStore.state.rightSidebarVisible}>
+              <div class="app-shell__right-sidebar">
+                <div class="app-shell__right-sidebar-tabs">
+                  <button
+                    class={`app-shell__right-sidebar-tab ${uiStore.state.rightSidebarTab === "snippets" ? "app-shell__right-sidebar-tab--active" : ""}`}
+                    onClick={() => uiStore.showSnippets()}
+                  >
+                    Snippets
+                  </button>
+                  <button
+                    class={`app-shell__right-sidebar-tab ${uiStore.state.rightSidebarTab === "hosts" ? "app-shell__right-sidebar-tab--active" : ""}`}
+                    onClick={() => uiStore.showHosts()}
+                  >
+                    Hosts
+                  </button>
+                </div>
+                <div class="app-shell__right-sidebar-content">
+                  <Show when={uiStore.state.rightSidebarTab === "snippets"}>
+                    <SnippetPanel />
+                  </Show>
+                  <Show when={uiStore.state.rightSidebarTab === "hosts"}>
+                    <SshHostPanel onConnect={handleSshConfigConnect} />
+                  </Show>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </div>
       </div>
       <SettingsView
         open={uiStore.state.settingsOpen}

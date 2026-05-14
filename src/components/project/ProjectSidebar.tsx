@@ -67,7 +67,9 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
   const [newSessionName, setNewSessionName] = createSignal("");
   const [showCreate, setShowCreate] = createSignal(false);
   const [dragOverProjectId, setDragOverProjectId] = createSignal<string | null>(null);
+  const [draggingProjectId, setDraggingProjectId] = createSignal<string | null>(null);
   let draggedProjectId: string | null = null;
+  let suppressNextClick = false;
 
   onMount(() => {
     tmuxStore.refreshLocal();
@@ -97,43 +99,65 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         <For each={state.projects}>
           {(project, getIndex) => (
             <div
-              class={`project-sidebar__project ${state.activeProjectId === project.id ? "project-sidebar__project--active" : ""} ${dragOverProjectId() === project.id ? "project-sidebar__project--drag-over" : ""}`}
-              draggable="true"
-              onDragStart={(e) => {
+              class={`project-sidebar__project ${state.activeProjectId === project.id ? "project-sidebar__project--active" : ""} ${dragOverProjectId() === project.id ? "project-sidebar__project--drag-over" : ""} ${draggingProjectId() === project.id ? "project-sidebar__project--dragging" : ""}`}
+              data-project-id={project.id}
+              onMouseDown={(e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                const startY = e.clientY;
+                const sourceProjectId = project.id;
+                let moved = false;
                 draggedProjectId = project.id;
-                e.dataTransfer!.effectAllowed = "move";
-                e.dataTransfer!.setData("text/plain", project.id);
-                (e.currentTarget as HTMLElement).classList.add("project-sidebar__project--dragging");
-              }}
-              onDragEnd={(e) => {
-                draggedProjectId = null;
-                setDragOverProjectId(null);
-                (e.currentTarget as HTMLElement).classList.remove("project-sidebar__project--dragging");
-              }}
-              onDragOver={(e) => {
-                if (draggedProjectId === null || draggedProjectId === project.id) return;
-                e.preventDefault();
-                e.dataTransfer!.dropEffect = "move";
-                setDragOverProjectId(project.id);
-              }}
-              onDragLeave={() => {
-                if (dragOverProjectId() === project.id) setDragOverProjectId(null);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOverProjectId(null);
-                if (draggedProjectId === null || draggedProjectId === project.id) return;
-                const fromIdx = state.projects.findIndex((p) => p.id === draggedProjectId);
-                const toIdx = getIndex();
-                if (fromIdx !== -1 && fromIdx !== toIdx) {
-                  reorderProjects(fromIdx, toIdx);
-                }
-                draggedProjectId = null;
+                setDraggingProjectId(project.id);
+
+                const onMove = (me: MouseEvent) => {
+                  if (!moved && Math.abs(me.clientY - startY) < 4) return;
+                  moved = true;
+                  const projectEls = document.querySelectorAll('.project-sidebar__project[data-project-id]');
+                  let overId: string | null = null;
+                  projectEls.forEach((el) => {
+                    const rect = el.getBoundingClientRect();
+                    if (me.clientY >= rect.top && me.clientY <= rect.bottom) {
+                      overId = el.getAttribute('data-project-id');
+                    }
+                  });
+                  // If cursor is below all items, target the last one
+                  if (!overId && projectEls.length > 0) {
+                    const lastRect = projectEls[projectEls.length - 1].getBoundingClientRect();
+                    if (me.clientY > lastRect.bottom) {
+                      overId = projectEls[projectEls.length - 1].getAttribute('data-project-id');
+                    }
+                  }
+                  setDragOverProjectId(overId !== sourceProjectId ? overId : null);
+                };
+
+                const onUp = () => {
+                  document.removeEventListener('mousemove', onMove);
+                  document.removeEventListener('mouseup', onUp);
+                  const targetId = dragOverProjectId();
+                  setDragOverProjectId(null);
+                  setDraggingProjectId(null);
+                  draggedProjectId = null;
+                  if (moved && targetId && sourceProjectId !== targetId) {
+                    const fromIdx = state.projects.findIndex((p) => p.id === sourceProjectId);
+                    const toIdx = state.projects.findIndex((p) => p.id === targetId);
+                    if (fromIdx !== -1 && toIdx !== -1) {
+                      reorderProjects(fromIdx, toIdx);
+                    }
+                    suppressNextClick = true;
+                  }
+                };
+
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
               }}
             >
               <div
                 class="project-sidebar__project-header"
-                onClick={() => setActiveProject(project.id)}
+                onClick={() => {
+                  if (suppressNextClick) { suppressNextClick = false; return; }
+                  setActiveProject(project.id);
+                }}
               >
                 <EditableText
                   value={project.name}

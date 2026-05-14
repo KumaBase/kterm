@@ -22,6 +22,9 @@ fn default_line_height() -> f32 {
 fn default_padding() -> u16 {
     8
 }
+fn default_terminal_color_theme() -> String {
+    "builtin:tokyo-night-dark".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalSettings {
@@ -80,6 +83,8 @@ pub struct AppConfig {
     pub theme: Theme,
     pub terminal: TerminalSettings,
     pub window: WindowSettings,
+    #[serde(default = "default_terminal_color_theme")]
+    pub terminal_color_theme: String,
 }
 
 impl Default for AppConfig {
@@ -88,6 +93,7 @@ impl Default for AppConfig {
             theme: Theme::default(),
             terminal: TerminalSettings::default(),
             window: WindowSettings::default(),
+            terminal_color_theme: default_terminal_color_theme(),
         }
     }
 }
