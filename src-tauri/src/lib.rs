@@ -30,6 +30,7 @@ pub fn run() {
             commands::profiles::shell_profile_delete,
             commands::profiles::shell_profile_set_default,
             commands::profiles::shell_detect_available,
+            commands::profiles::windows_terminal_profiles_import,
             commands::pty::pty_spawn,
             commands::pty::session_write,
             commands::pty::session_resize,

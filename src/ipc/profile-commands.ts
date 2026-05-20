@@ -54,3 +54,14 @@ export async function shellProfileSetDefault(id: string): Promise<void> {
 export async function shellDetectAvailable(): Promise<string[]> {
   return invoke("shell_detect_available");
 }
+
+export interface ImportedProfile {
+  name: string;
+  shell: string;
+  args: string[];
+  cwd: string | null;
+}
+
+export async function windowsTerminalProfilesImport(): Promise<ImportedProfile[]> {
+  return invoke("windows_terminal_profiles_import");
+}

@@ -87,3 +87,8 @@ pub fn shell_profile_set_default(id: String) -> Result<(), String> {
 pub fn shell_detect_available() -> Vec<String> {
     crate::pty::detect_shells()
 }
+
+#[tauri::command]
+pub fn windows_terminal_profiles_import() -> Vec<crate::pty::ImportedProfile> {
+    crate::pty::import_windows_terminal_profiles()
+}

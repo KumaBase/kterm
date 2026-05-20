@@ -6,6 +6,7 @@ import {
   shellProfileDelete as deleteProfile,
   shellProfileSetDefault as setDefaultProfile,
   shellDetectAvailable,
+  windowsTerminalProfilesImport,
 } from "../ipc/profile-commands";
 import type { ShellProfile, ShellProfilesConfig } from "../ipc/profile-commands";
 
@@ -46,10 +47,10 @@ export function useProfileStore() {
 
   const syncProfiles = async () => {
     const shells = await shellDetectAvailable();
-    const existingPaths = new Set(state.profiles.map((p) => p.shell));
+    const existingPaths = new Set(state.profiles.map((p) => p.shell.toLowerCase()));
 
     for (const shellPath of shells) {
-      if (!existingPaths.has(shellPath)) {
+      if (!existingPaths.has(shellPath.toLowerCase())) {
         const profile = await createProfile(
           shellPathToName(shellPath),
           shellPath,
@@ -58,6 +59,17 @@ export function useProfileStore() {
           []
         );
         setState("profiles", (prev) => [...prev, profile]);
+        existingPaths.add(shellPath.toLowerCase());
+      }
+    }
+
+    // Import Windows Terminal profiles (no-op on non-Windows)
+    const wtProfiles = await windowsTerminalProfilesImport();
+    for (const wt of wtProfiles) {
+      if (!existingPaths.has(wt.shell.toLowerCase())) {
+        const profile = await createProfile(wt.name, wt.shell, wt.args, wt.cwd, []);
+        setState("profiles", (prev) => [...prev, profile]);
+        existingPaths.add(wt.shell.toLowerCase());
       }
     }
   };
