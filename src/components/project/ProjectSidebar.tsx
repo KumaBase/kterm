@@ -1,6 +1,8 @@
 import { For, Show, createSignal, onMount } from "solid-js";
 import { useProjectStore } from "../../stores/project-store";
 import { useTmuxStore } from "../../stores/tmux-store";
+import { useZellijStore } from "../../stores/zellij-store";
+import { useTerminalSettingsStore } from "../../stores/terminal-settings-store";
 import "./ProjectSidebar.css";
 
 interface ProjectSidebarProps {
@@ -8,6 +10,7 @@ interface ProjectSidebarProps {
   onDeleteProject?: (projectId: string) => void;
   onTmuxAttach?: (tmuxSessionName: string) => void;
   onRemoteTmuxAttach?: (sshSessionId: string, tmuxSessionName: string, host: string) => void;
+  onZellijAttach?: (zellijSessionName: string) => void;
 }
 
 function EditableText(props: {
@@ -63,7 +66,10 @@ function EditableText(props: {
 export function ProjectSidebar(props: ProjectSidebarProps) {
   const { state, setActiveProject, updateProjectName, reorderProjects } = useProjectStore();
   const tmuxStore = useTmuxStore();
+  const zellijStore = useZellijStore();
+  const { tmuxEnabled, zellijEnabled } = useTerminalSettingsStore();
   const [tmuxExpanded, setTmuxExpanded] = createSignal(false);
+  const [zellijExpanded, setZellijExpanded] = createSignal(false);
   const [newSessionName, setNewSessionName] = createSignal("");
   const [showCreate, setShowCreate] = createSignal(false);
   const [dragOverProjectId, setDragOverProjectId] = createSignal<string | null>(null);
@@ -73,6 +79,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
 
   onMount(() => {
     tmuxStore.refreshLocal();
+    zellijStore.refreshLocal();
   });
 
   const handleCreate = async () => {
@@ -180,7 +187,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       </div>
 
       {/* tmux section */}
-      <Show when={tmuxStore.state.localInfo.installed}>
+      <Show when={tmuxEnabled() && tmuxStore.state.localInfo.installed}>
         <div class="project-sidebar__tmux-section">
           <div
             class="project-sidebar__tmux-header"
@@ -261,7 +268,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       </Show>
 
       {/* Remote tmux sessions (from SSH connections) */}
-      <Show when={tmuxStore.state.remoteStates.length > 0}>
+      <Show when={tmuxEnabled() && tmuxStore.state.remoteStates.length > 0}>
         <div class="project-sidebar__tmux-section">
           <div
             class="project-sidebar__tmux-header"
@@ -312,6 +319,63 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
                 </div>
               )}
             </For>
+          </Show>
+        </div>
+      </Show>
+
+      {/* zellij section */}
+      <Show when={zellijEnabled() && zellijStore.state.localInfo.installed}>
+        <div class="project-sidebar__tmux-section">
+          <div
+            class="project-sidebar__tmux-header"
+            onClick={() => setZellijExpanded(!zellijExpanded())}
+          >
+            <button class="project-sidebar__expand">
+              {zellijExpanded() ? "\u25BC" : "\u25B6"}
+            </button>
+            <span class="project-sidebar__tmux-title">zellij</span>
+            <div class="project-sidebar__tmux-actions">
+              <button
+                class="project-sidebar__tmux-icon-btn"
+                onClick={(e) => { e.stopPropagation(); zellijStore.refreshLocal(); }}
+                title="Refresh"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 4v4h4" /><path d="M3.5 12A6 6 0 1 0 3 7.5L1 8" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <Show when={zellijExpanded()}>
+            <div class="project-sidebar__tmux-sessions">
+              <For each={zellijStore.state.localSessions}>
+                {(session) => (
+                  <div
+                    class={`project-sidebar__tmux-session ${session.attached ? "project-sidebar__tmux-session--attached" : ""}`}
+                    onClick={() => !session.attached && props.onZellijAttach?.(session.name)}
+                  >
+                    <span class="project-sidebar__tmux-session-name">
+                      {session.name}
+                    </span>
+                    <Show when={session.tabs > 0}>
+                      <span class="project-sidebar__tmux-session-info">
+                        {session.tabs}t
+                      </span>
+                    </Show>
+                    <button
+                      class="project-sidebar__tmux-kill"
+                      onClick={(e) => { e.stopPropagation(); zellijStore.killLocalSession(session.name); }}
+                      title="Kill session"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </For>
+              <Show when={zellijStore.state.localSessions.length === 0}>
+                <div class="project-sidebar__tmux-empty">No sessions</div>
+              </Show>
+            </div>
           </Show>
         </div>
       </Show>

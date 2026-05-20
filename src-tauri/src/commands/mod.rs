@@ -7,3 +7,4 @@ pub mod snippets;
 pub mod color_themes;
 pub mod ssh;
 pub mod tmux;
+pub mod zellij;

@@ -209,8 +209,9 @@ export function useTmuxStore() {
     return state.tmuxTabs.find((t) => t.ktermTabId === ktermTabId);
   };
 
-  /** Poll all active tmux tabs for window changes */
+  /** Poll all active tmux tabs for window changes and detect session loss */
   const pollWindows = async () => {
+    const toRemove: string[] = [];
     for (const tab of state.tmuxTabs) {
       try {
         let windows: TmuxWindow[];
@@ -228,8 +229,13 @@ export function useTmuxStore() {
           setState("tmuxTabs", idx, "windows", windows);
         }
       } catch {
-        // Session may have been killed
+        // Session no longer exists — auto-unregister
+        toRemove.push(tab.ktermTabId);
       }
+    }
+    // Auto-unregister tabs whose tmux sessions have been killed
+    for (const id of toRemove) {
+      unregisterTmuxTab(id);
     }
   };
 

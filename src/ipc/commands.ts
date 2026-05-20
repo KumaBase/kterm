@@ -70,6 +70,8 @@ export interface AppConfig {
   terminal: TerminalSettings;
   window: WindowSettings;
   terminal_color_theme: string;
+  tmux_enabled: boolean;
+  zellij_enabled: boolean;
 }
 
 export type Theme = "Dark" | "Light" | "System";

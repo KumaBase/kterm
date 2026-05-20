@@ -15,11 +15,15 @@ const defaultSettings: TerminalSettings = {
 };
 
 const [settings, setSettings] = createSignal<TerminalSettings>(defaultSettings);
+const [tmuxEnabled, setTmuxEnabled] = createSignal(true);
+const [zellijEnabled, setZellijEnabled] = createSignal(true);
 
 export async function loadTerminalSettings() {
   try {
     const config = await configLoad();
     setSettings(config.terminal);
+    setTmuxEnabled(config.tmux_enabled ?? true);
+    setZellijEnabled(config.zellij_enabled ?? true);
   } catch (e) {
     console.error("Failed to load terminal settings:", e);
   }
@@ -30,5 +34,5 @@ export function updateTerminalSettings(newSettings: TerminalSettings) {
 }
 
 export function useTerminalSettingsStore() {
-  return { settings };
+  return { settings, tmuxEnabled, zellijEnabled };
 }

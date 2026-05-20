@@ -86,6 +86,7 @@ export function useTerminal(options: UseTerminalOptions) {
     lineHeight: options.settings?.line_height ?? 1.2,
     letterSpacing: options.settings?.letter_spacing ?? 0,
     theme: effectiveTheme,
+    macOptionClickForcesSelection: true,
   });
 
   const fitAddon = new FitAddon();

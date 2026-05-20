@@ -22,8 +22,16 @@ const [state, setState] = createStore<ProfileState>({
 });
 
 function shellPathToName(path: string): string {
-  const basename = path.split("/").pop() ?? path;
-  return basename.charAt(0).toUpperCase() + basename.slice(1);
+  const basename = path.split(/[\/\\]/).pop() ?? path;
+  const name = basename.replace(/\.exe$/i, "");
+  const nameMap: Record<string, string> = {
+    cmd: "Command Prompt",
+    powershell: "PowerShell",
+    pwsh: "PowerShell Core",
+    wsl: "WSL",
+    nu: "Nushell",
+  };
+  return nameMap[name.toLowerCase()] ?? (name.charAt(0).toUpperCase() + name.slice(1));
 }
 
 export function useProfileStore() {

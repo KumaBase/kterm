@@ -40,6 +40,21 @@ export function useSessionStore() {
     }
   };
 
+  /** Remove session from frontend state immediately, defer backend kill.
+   *  Used for multiplexer tabs so the session has time to detach before SIGKILL. */
+  const deferRemoveSession = (sessionId: string, delayMs = 2000) => {
+    const sessions = { ...state.sessions };
+    delete sessions[sessionId];
+    setState("sessions", sessions);
+    if (state.activeSessionId === sessionId) {
+      const remaining = Object.keys(sessions);
+      setState("activeSessionId", remaining.length > 0 ? remaining[0] : null);
+    }
+    setTimeout(async () => {
+      try { await killSession(sessionId); } catch {}
+    }, delayMs);
+  };
+
   const setActive = (sessionId: string) => {
     setState("activeSessionId", sessionId);
   };
@@ -76,6 +91,7 @@ export function useSessionStore() {
     createSession,
     createSessionFromProfile,
     removeSession,
+    deferRemoveSession,
     setActive,
     activeSession,
     sessionList,

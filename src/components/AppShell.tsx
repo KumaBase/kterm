@@ -9,6 +9,7 @@ import { useUiStore } from "../stores/ui-store";
 import { useThemeStore } from "../stores/theme-store";
 import { useProfileStore } from "../stores/profile-store";
 import { useTmuxStore } from "../stores/tmux-store";
+import { useZellijStore } from "../stores/zellij-store";
 import { useKeyboard } from "../hooks/use-keyboard";
 import { ProjectSidebar } from "./project/ProjectSidebar";
 import { SnippetPanel } from "./snippets/SnippetPanel";
@@ -28,6 +29,7 @@ export function AppShell() {
   const themeStore = useThemeStore();
   const profileStore = useProfileStore();
   const tmuxStore = useTmuxStore();
+  const zellijStore = useZellijStore();
 
   // Cleanup holders for Tauri listeners (registered synchronously)
   const unlisteners: (() => void)[] = [];
@@ -42,17 +44,6 @@ export function AppShell() {
         if (sessions.includes(sessionId)) {
           if (sessions.length === 1) {
             // Single pane — close entire tab
-            const tmuxTab = tmuxStore.getTmuxTab(tab.id);
-            if (tmuxTab) {
-              try {
-                if (tmuxTab.isRemote) {
-                  tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName);
-                } else {
-                  tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName);
-                }
-              } catch {}
-              tmuxStore.unregisterTmuxTab(tab.id);
-            }
             sessionStore.removeSession(sessionId);
             projectStore.removeTab(proj.id, tab.id);
           } else {
@@ -177,7 +168,7 @@ export function AppShell() {
     }
   };
 
-  // Open a new tab that attaches to a local tmux session
+  // Open a new tab that attaches to a local tmux session (no tab sync)
   const handleTmuxAttach = async (tmuxSessionName: string) => {
     const project = projectStore.activeProject();
     if (!project) return;
@@ -186,42 +177,33 @@ export function AppShell() {
     const tab = projectStore.addTab(project.id, `tmux: ${tmuxSessionName}`);
     const session = await sessionStore.createSession(shell);
     projectStore.setPaneSession(project.id, tab.id, tab.rootPane.id, session.id);
-    // Register as tmux tab for window-tab integration
-    tmuxStore.registerTmuxTab(tab.id, session.id, tmuxSessionName);
-    tmuxStore.startPolling();
     syncActiveSession();
-    // Send tmux attach + hide tmux status bar after a short delay
+    // Send tmux attach command after a short delay
     setTimeout(async () => {
       await sessionStore.writeToSession(session.id, `tmux attach -t '${tmuxSessionName.replace(/'/g, "'\\''")}'\n`);
     }, 300);
   };
 
-  // Attach to a remote tmux session from an existing SSH connection
+  // Attach to a remote tmux session from an existing SSH connection (no tab sync)
   const handleRemoteTmuxAttach = async (sshSessionId: string, tmuxSessionName: string, host: string) => {
-    const project = projectStore.activeProject();
-    if (!project) return;
-
-    // Find the kterm tab that holds this SSH session
-    let targetTabId: string | null = null;
-    for (const proj of projectStore.state.projects) {
-      for (const tab of proj.tabs) {
-        const sessions = collectSessions(tab.rootPane);
-        if (sessions.includes(sshSessionId)) {
-          targetTabId = tab.id;
-          break;
-        }
-      }
-      if (targetTabId) break;
-    }
-
-    // Register the tab as a remote tmux tab
-    if (targetTabId) {
-      tmuxStore.registerTmuxTab(targetTabId, sshSessionId, tmuxSessionName, true);
-      tmuxStore.startPolling();
-    }
-
     // Write tmux attach command to the SSH session
     await sessionStore.writeToSession(sshSessionId, `tmux attach -t '${tmuxSessionName.replace(/'/g, "'\\''")}'\n`);
+  };
+
+  // Open a new tab that attaches to a local zellij session (no tab sync)
+  const handleZellijAttach = async (zellijSessionName: string) => {
+    const project = projectStore.activeProject();
+    if (!project) return;
+    const defaultProfile = profileStore.getDefaultProfile();
+    const shell = defaultProfile?.shell;
+    const tab = projectStore.addTab(project.id, `zellij: ${zellijSessionName}`);
+    const session = await sessionStore.createSession(shell);
+    projectStore.setPaneSession(project.id, tab.id, tab.rootPane.id, session.id);
+    syncActiveSession();
+    // Send zellij attach command after a short delay
+    setTimeout(async () => {
+      await sessionStore.writeToSession(session.id, `zellij attach '${zellijSessionName.replace(/'/g, "'\\''")}'\n`);
+    }, 300);
   };
 
   const handleCloseActiveTab = async () => {
@@ -229,18 +211,6 @@ export function AppShell() {
     if (!project || !project.activeTabId) return;
     const tab = project.tabs.find((t) => t.id === project.activeTabId);
     if (!tab) return;
-    // Detach tmux session before killing PTY to keep it alive
-    const tmuxTab = tmuxStore.getTmuxTab(tab.id);
-    if (tmuxTab) {
-      try {
-        if (tmuxTab.isRemote) {
-          await tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName);
-        } else {
-          await tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName);
-        }
-      } catch {}
-      tmuxStore.unregisterTmuxTab(tab.id);
-    }
     const sessions = collectSessions(tab.rootPane);
     sessions.forEach((s) => sessionStore.removeSession(s));
     projectStore.removeTab(project.id, tab.id);
@@ -300,18 +270,6 @@ export function AppShell() {
     if (!confirmed) return;
 
     for (const tab of project.tabs) {
-      // Detach tmux sessions before killing PTYs (best-effort)
-      const tmuxTab = tmuxStore.getTmuxTab(tab.id);
-      if (tmuxTab) {
-        try {
-          if (tmuxTab.isRemote) {
-            await tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName);
-          } else {
-            await tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName);
-          }
-        } catch {}
-        tmuxStore.unregisterTmuxTab(tab.id);
-      }
       const sessions = collectSessions(tab.rootPane);
       for (const s of sessions) {
         await sessionStore.removeSession(s);
@@ -389,6 +347,7 @@ export function AppShell() {
             onDeleteProject={handleDeleteProject}
             onTmuxAttach={handleTmuxAttach}
             onRemoteTmuxAttach={handleRemoteTmuxAttach}
+            onZellijAttach={handleZellijAttach}
           />
         </Show>
         <div class="app-shell__main">
@@ -404,49 +363,8 @@ export function AppShell() {
               </svg>
             </button>
             <div class="app-shell__tabbar-tabs">
-              <Show
-                when={activeTab() && tmuxStore.getTmuxTab(activeTab()!.id)}
-              >
-                {/* tmux window tabs — active tab is in tmux mode */}
-                <For each={tmuxStore.getTmuxTab(activeTab()!.id)!.windows}>
-                  {(win) => (
-                    <div
-                      class={`app-shell__tab ${win.active ? "app-shell__tab--active" : ""}`}
-                      onClick={() => {
-                        const t = tmuxStore.getTmuxTab(activeTab()!.id);
-                        if (t) tmuxStore.selectWindow(t.tmuxSessionName, win.index);
-                      }}
-                    >
-                      <span class="app-shell__tab-title">{win.name}</span>
-                      <button
-                        class="app-shell__tab-close"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const t = tmuxStore.getTmuxTab(activeTab()!.id);
-                          if (t) tmuxStore.killWindow(t.tmuxSessionName, win.index);
-                        }}
-                        title="Close window"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
-                </For>
-                <button
-                  class="app-shell__tabbar-new"
-                  onClick={() => {
-                    const t = tmuxStore.getTmuxTab(activeTab()!.id);
-                    if (t) tmuxStore.createWindow(t.tmuxSessionName);
-                  }}
-                  title="New tmux window"
-                >
-                  +
-                </button>
-              </Show>
-              {/* Show this when active tab is NOT in tmux mode */}
-              <Show when={!activeTab() || !tmuxStore.getTmuxTab(activeTab()!.id)}>
-                <Show when={activeProject()}>
-                  {(project) => (
+              <Show when={activeProject()}>
+                {(project) => (
                     <For each={project().tabs}>
                       {(tab, getIndex) => (
                         <div
@@ -530,15 +448,6 @@ export function AppShell() {
                             class="app-shell__tab-close"
                             onClick={(e) => {
                               e.stopPropagation();
-                              const tmuxTab = tmuxStore.getTmuxTab(tab.id);
-                              if (tmuxTab) {
-                                if (tmuxTab.isRemote) {
-                                  tmuxStore.detachRemoteSession(tmuxTab.sessionId, tmuxTab.tmuxSessionName).catch(() => {});
-                                } else {
-                                  tmuxStore.detachLocalSession(tmuxTab.tmuxSessionName).catch(() => {});
-                                }
-                                tmuxStore.unregisterTmuxTab(tab.id);
-                              }
                               const sessions = collectSessions(tab.rootPane);
                               sessions.forEach((s) => sessionStore.removeSession(s));
                               projectStore.removeTab(project().id, tab.id);
@@ -581,7 +490,6 @@ export function AppShell() {
                     </div>
                   </Show>
                 </div>
-              </Show>
             </div>
             <div class="app-shell__tabbar-actions">
               <button

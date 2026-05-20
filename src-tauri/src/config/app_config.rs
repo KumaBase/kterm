@@ -25,6 +25,9 @@ fn default_padding() -> u16 {
 fn default_terminal_color_theme() -> String {
     "builtin:tokyo-night-dark".to_string()
 }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalSettings {
@@ -85,6 +88,10 @@ pub struct AppConfig {
     pub window: WindowSettings,
     #[serde(default = "default_terminal_color_theme")]
     pub terminal_color_theme: String,
+    #[serde(default = "default_true")]
+    pub tmux_enabled: bool,
+    #[serde(default = "default_true")]
+    pub zellij_enabled: bool,
 }
 
 impl Default for AppConfig {
@@ -94,6 +101,8 @@ impl Default for AppConfig {
             terminal: TerminalSettings::default(),
             window: WindowSettings::default(),
             terminal_color_theme: default_terminal_color_theme(),
+            tmux_enabled: true,
+            zellij_enabled: true,
         }
     }
 }

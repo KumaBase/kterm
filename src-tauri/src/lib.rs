@@ -6,6 +6,7 @@ mod pty;
 mod session;
 mod ssh;
 mod tmux;
+mod zellij;
 
 use state::AppState;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -63,6 +64,17 @@ pub fn run() {
             commands::tmux::tmux_local_new_window,
             commands::tmux::tmux_local_kill_window,
             commands::tmux::tmux_local_rename_window,
+            commands::zellij::zellij_local_info,
+            commands::zellij::zellij_local_sessions,
+            commands::zellij::zellij_local_tabs,
+            commands::zellij::zellij_local_create,
+            commands::zellij::zellij_local_kill,
+            commands::zellij::zellij_remote_exec,
+            commands::zellij::zellij_session_attach,
+            commands::zellij::zellij_local_go_to_tab,
+            commands::zellij::zellij_local_new_tab,
+            commands::zellij::zellij_local_close_tab,
+            commands::zellij::zellij_local_rename_tab,
             commands::font::font_list,
         ])
         .setup(|app| {
