@@ -102,6 +102,7 @@ export function useTerminal(options: UseTerminalOptions) {
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let dataDisposable: { dispose: () => void } | null = null;
   let titleDisposable: { dispose: () => void } | null = null;
+  let osc52Disposable: { dispose: () => void } | null = null;
   let webglAddon: WebglAddon | null = null;
   let disposed = false;
 
@@ -211,6 +212,23 @@ export function useTerminal(options: UseTerminalOptions) {
       });
     }
 
+    // OSC 52: clipboard operations from remote applications (zellij, tmux, vim, etc.)
+    // Format: \x1b]52;<selection>;<base64>\x07
+    osc52Disposable = terminal.parser.registerOscHandler(52, (data) => {
+      const semicolonIndex = data.indexOf(";");
+      if (semicolonIndex === -1) return true;
+      const base64Text = data.substring(semicolonIndex + 1);
+      if (!base64Text) return true;
+      try {
+        const bytes = Uint8Array.from(atob(base64Text), (c) => c.charCodeAt(0));
+        const text = new TextDecoder().decode(bytes);
+        writeText(text).catch(() => {});
+      } catch {
+        // Invalid base64, ignore
+      }
+      return true;
+    });
+
     // Handle session output
     unlisten = await onSessionOutput((payload) => {
       if (payload.session_id !== sessionId) return;
@@ -248,6 +266,7 @@ export function useTerminal(options: UseTerminalOptions) {
     resizeObserver?.disconnect();
     dataDisposable?.dispose();
     titleDisposable?.dispose();
+    osc52Disposable?.dispose();
     unlisten?.();
     webglAddon?.dispose();
     terminal.dispose();
