@@ -63,16 +63,12 @@ export function useProfileStore() {
   };
 
   const initProfiles = async () => {
-    if (state.loaded && state.profiles.length > 0) {
-      // Even with existing profiles, check for newly installed shells
-      await syncProfiles();
-      return;
+    if (!state.loaded) {
+      await load();
     }
 
-    await load();
-
-    // Auto-detect shells on first run
     if (state.profiles.length === 0) {
+      // First run: detect all shells and set default
       const shells = await shellDetectAvailable();
 
       for (const shellPath of shells) {
@@ -86,7 +82,6 @@ export function useProfileStore() {
         setState("profiles", (prev) => [...prev, profile]);
       }
 
-      // Set $SHELL as default
       const defaultShell = shells[0];
       if (defaultShell) {
         const defaultProfile = state.profiles.find((p) => p.shell === defaultShell);
@@ -94,6 +89,9 @@ export function useProfileStore() {
           await setDefault(defaultProfile.id);
         }
       }
+    } else {
+      // Existing profiles: sync to detect newly installed shells
+      await syncProfiles();
     }
   };
 
