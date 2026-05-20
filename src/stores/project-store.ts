@@ -18,6 +18,7 @@ function createDefaultTab(title?: string): Tab {
     title: title || "Terminal",
     rootPane: createDefaultPane(),
     sessionId: null,
+    unread: false,
   };
 }
 
@@ -89,7 +90,18 @@ export function useProjectStore() {
       const project = s.projects.find((p) => p.id === projectId);
       if (project) {
         project.activeTabId = tabId;
+        const tab = project.tabs.find((t) => t.id === tabId);
+        if (tab) tab.unread = false;
       }
+    }));
+  };
+
+  const markTabUnread = (projectId: ProjectId, tabId: TabId) => {
+    setState(produce((s) => {
+      const project = s.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      const tab = project.tabs.find((t) => t.id === tabId);
+      if (tab) tab.unread = true;
     }));
   };
 
@@ -251,6 +263,7 @@ export function useProjectStore() {
     addTab,
     removeTab,
     setActiveTab,
+    markTabUnread,
     updateProjectName,
     reorderProjects,
     reorderTabs,

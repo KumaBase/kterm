@@ -15,6 +15,7 @@ export interface Tab {
   title: string;
   rootPane: SplitPane;
   sessionId: string | null;
+  unread: boolean;
 }
 
 export type PaneLayout = "horizontal" | "vertical";

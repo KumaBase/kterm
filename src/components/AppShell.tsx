@@ -1,4 +1,4 @@
-import { onMount, onCleanup, For, Show, createSignal } from "solid-js";
+import { onMount, onCleanup, For, Show, createSignal, createEffect } from "solid-js";
 import { loadTerminalSettings } from "../stores/terminal-settings-store";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
@@ -58,6 +58,43 @@ export function AppShell() {
   };
   document.addEventListener("kterm:session-exit", handleSessionExit);
   onCleanup(() => document.removeEventListener("kterm:session-exit", handleSessionExit));
+
+  // Helper: find project and tab that contain a given session
+  const findTabBySession = (sessionId: string) => {
+    for (const proj of projectStore.state.projects) {
+      for (const tab of proj.tabs) {
+        if (findSessionInPane(tab.rootPane, sessionId)) {
+          return { tab, project: proj };
+        }
+      }
+    }
+    return { tab: null, project: null };
+  };
+
+  // BEL → system notification + unread badge
+  const handleBell = (e: Event) => {
+    const { sessionId } = (e as CustomEvent).detail;
+    const { tab, project } = findTabBySession(sessionId);
+    if (!tab || !project) return;
+    if (project.activeTabId !== tab.id) {
+      projectStore.markTabUnread(project.id, tab.id);
+      new Notification("kTerm", { body: `${tab.title} - Bell` });
+    }
+  };
+  document.addEventListener("kterm:bell", handleBell);
+  onCleanup(() => document.removeEventListener("kterm:bell", handleBell));
+
+  // Activity → unread badge only
+  const handleActivity = (e: Event) => {
+    const { sessionId } = (e as CustomEvent).detail;
+    const { tab, project } = findTabBySession(sessionId);
+    if (!tab || !project) return;
+    if (project.activeTabId !== tab.id && !tab.unread) {
+      projectStore.markTabUnread(project.id, tab.id);
+    }
+  };
+  document.addEventListener("kterm:activity", handleActivity);
+  onCleanup(() => document.removeEventListener("kterm:activity", handleActivity));
 
   onMount(async () => {
     await themeStore.initTheme();
@@ -421,15 +458,20 @@ export function AppShell() {
                           <Show
                             when={editingTabId() === tab.id}
                             fallback={
-                              <span
-                                class="app-shell__tab-title"
-                                onDblClick={(e) => {
-                                  e.stopPropagation();
-                                  startTabEdit(tab.id);
-                                }}
-                              >
-                                {tab.title}
-                              </span>
+                              <>
+                                <Show when={tab.unread}>
+                                  <span class="app-shell__tab-unread" />
+                                </Show>
+                                <span
+                                  class="app-shell__tab-title"
+                                  onDblClick={(e) => {
+                                    e.stopPropagation();
+                                    startTabEdit(tab.id);
+                                  }}
+                                >
+                                  {tab.title}
+                                </span>
+                              </>
                             }
                           >
                             <input
@@ -512,11 +554,21 @@ export function AppShell() {
                 {(project) => (
                   <For each={project.tabs}>
                     {(tab) => {
+                      let layerRef!: HTMLDivElement;
                       const isActive = () =>
                         projectStore.state.activeProjectId === project.id &&
                         project.activeTabId === tab.id;
+                      createEffect(() => {
+                        if (isActive()) {
+                          requestAnimationFrame(() => {
+                            const textarea = layerRef?.querySelector('.xterm textarea');
+                            if (textarea instanceof HTMLElement) textarea.focus();
+                          });
+                        }
+                      });
                       return (
                         <div
+                          ref={layerRef}
                           class="app-shell__terminal-layer"
                           style={{
                             visibility: isActive() ? "visible" : "hidden",

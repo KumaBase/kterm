@@ -103,6 +103,7 @@ export function useTerminal(options: UseTerminalOptions) {
   let dataDisposable: { dispose: () => void } | null = null;
   let titleDisposable: { dispose: () => void } | null = null;
   let osc52Disposable: { dispose: () => void } | null = null;
+  let bellDisposable: { dispose: () => void } | null = null;
   let webglAddon: WebglAddon | null = null;
   let disposed = false;
 
@@ -212,6 +213,14 @@ export function useTerminal(options: UseTerminalOptions) {
       });
     }
 
+    // BEL notification: dispatch custom event for system notification + unread badge
+    bellDisposable = terminal.onBell(() => {
+      terminalRef.dispatchEvent(new CustomEvent("kterm:bell", {
+        bubbles: true,
+        detail: { sessionId },
+      }));
+    });
+
     // OSC 52: clipboard operations from remote applications (zellij, tmux, vim, etc.)
     // Format: \x1b]52;<selection>;<base64>\x07
     osc52Disposable = terminal.parser.registerOscHandler(52, (data) => {
@@ -234,6 +243,10 @@ export function useTerminal(options: UseTerminalOptions) {
       if (payload.session_id !== sessionId) return;
       if (payload.kind.type === "stdout") {
         terminal.write(payload.kind.data);
+        terminalRef.dispatchEvent(new CustomEvent("kterm:activity", {
+          bubbles: true,
+          detail: { sessionId },
+        }));
       } else if (payload.kind.type === "exited") {
         const code = payload.kind.data;
         terminal.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
@@ -267,6 +280,7 @@ export function useTerminal(options: UseTerminalOptions) {
     dataDisposable?.dispose();
     titleDisposable?.dispose();
     osc52Disposable?.dispose();
+    bellDisposable?.dispose();
     unlisten?.();
     webglAddon?.dispose();
     terminal.dispose();

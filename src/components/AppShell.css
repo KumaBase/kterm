@@ -65,6 +65,14 @@
   max-width: 160px;
 }
 
+.app-shell__tab-unread {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  flex-shrink: 0;
+}
+
 .app-shell__tabbar-new {
   display: flex;
   align-items: center;
