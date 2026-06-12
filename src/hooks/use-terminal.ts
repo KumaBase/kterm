@@ -1,6 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { WebglAddon } from "@xterm/addon-webgl";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { sessionWrite, sessionResize } from "../ipc/commands";
@@ -104,8 +104,10 @@ export function useTerminal(options: UseTerminalOptions) {
   let titleDisposable: { dispose: () => void } | null = null;
   let osc52Disposable: { dispose: () => void } | null = null;
   let bellDisposable: { dispose: () => void } | null = null;
-  let webglAddon: WebglAddon | null = null;
+  let canvasAddon: CanvasAddon | null = null;
   let disposed = false;
+  let keyRepeatCleanupFn: (() => void) | null = null;
+  let keyRepeatKeyupFn: ((e: KeyboardEvent) => void) | null = null;
 
   const isVisible = () => {
     if (!terminalRef.isConnected) return false;
@@ -169,14 +171,10 @@ export function useTerminal(options: UseTerminalOptions) {
     });
 
     try {
-      webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        webglAddon?.dispose();
-        webglAddon = null;
-      });
-      terminal.loadAddon(webglAddon);
+      canvasAddon = new CanvasAddon();
+      terminal.loadAddon(canvasAddon);
     } catch {
-      // WebGL not available, fallback to canvas
+      // Canvas not available, fallback to default renderer
     }
 
     // Handle user input
@@ -187,6 +185,74 @@ export function useTerminal(options: UseTerminalOptions) {
         console.error("Failed to write to session:", e);
       }
     });
+
+    // Key repeat fallback for WKWebView (Tauri macOS)
+    // WKWebView may not fire repeated keydown events for held keys.
+    // This monitors onKey events and starts synthetic repeat when the
+    // browser doesn't send repeat events within the expected delay.
+    const heldKeys = new Map<string, {
+      data: string;
+      initialTimer: ReturnType<typeof setTimeout>;
+      repeatTimer: ReturnType<typeof setInterval> | null;
+    }>();
+    let keyRepeatActive = true;
+
+    const keyRepeatCleanup = () => {
+      keyRepeatActive = false;
+      for (const [, held] of heldKeys) {
+        clearTimeout(held.initialTimer);
+        if (held.repeatTimer) clearInterval(held.repeatTimer);
+      }
+      heldKeys.clear();
+    };
+
+    terminal.onKey(({ key, domEvent }) => {
+      if (!keyRepeatActive) return;
+      if (!key || domEvent.ctrlKey || domEvent.metaKey || domEvent.altKey) return;
+
+      const code = domEvent.code;
+
+      if (domEvent.repeat) {
+        // Browser IS sending repeat events — cancel our fallback timers
+        const held = heldKeys.get(code);
+        if (held) {
+          clearTimeout(held.initialTimer);
+          if (held.repeatTimer) clearInterval(held.repeatTimer);
+          held.repeatTimer = null;
+        }
+        return;
+      }
+
+      // First keydown — set up fallback repeat after initial delay
+      const existing = heldKeys.get(code);
+      if (existing) {
+        clearTimeout(existing.initialTimer);
+        if (existing.repeatTimer) clearInterval(existing.repeatTimer);
+      }
+
+      const held = {
+        data: key,
+        initialTimer: setTimeout(() => {
+          held.repeatTimer = setInterval(() => {
+            if (keyRepeatActive) sessionWrite(sessionId, held.data);
+          }, 33);
+        }, 500),
+        repeatTimer: null as ReturnType<typeof setInterval> | null,
+      };
+      heldKeys.set(code, held);
+    });
+
+    const keyRepeatKeyupHandler = (e: KeyboardEvent) => {
+      const held = heldKeys.get(e.code);
+      if (held) {
+        clearTimeout(held.initialTimer);
+        if (held.repeatTimer) clearInterval(held.repeatTimer);
+        heldKeys.delete(e.code);
+      }
+    };
+    terminalRef.addEventListener("keyup", keyRepeatKeyupHandler);
+    keyRepeatCleanupFn = keyRepeatCleanup;
+    keyRepeatKeyupFn = keyRepeatKeyupHandler;
 
     // Copy on select
     if (options.settings?.copy_on_select) {
@@ -249,6 +315,21 @@ export function useTerminal(options: UseTerminalOptions) {
         }));
       } else if (payload.kind.type === "exited") {
         const code = payload.kind.data;
+        // Stop accepting input — session is dead
+        dataDisposable?.dispose();
+        dataDisposable = null;
+        // Reset terminal modes (mouse tracking, alternate screen, etc.)
+        terminal.write(
+          "\x1b[?1049l" + // Exit alternate screen buffer
+          "\x1b[?1000l" + // Disable mouse tracking (basic)
+          "\x1b[?1002l" + // Disable mouse event tracking
+          "\x1b[?1003l" + // Disable mouse any-event tracking
+          "\x1b[?1006l" + // Disable SGR mouse mode
+          "\x1b[?1015l" + // Disable URXVT mouse mode
+          "\x1b[?2004l" + // Disable bracketed paste
+          "\x1b[?1l"   +  // Reset cursor keys to normal mode
+          "\x1b>"        // Exit application keypad mode
+        );
         terminal.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
         if (code === 0) {
           terminalRef.dispatchEvent(new CustomEvent("kterm:session-exit", {
@@ -281,8 +362,10 @@ export function useTerminal(options: UseTerminalOptions) {
     titleDisposable?.dispose();
     osc52Disposable?.dispose();
     bellDisposable?.dispose();
+    keyRepeatCleanupFn?.();
+    if (keyRepeatKeyupFn) terminalRef.removeEventListener("keyup", keyRepeatKeyupFn);
     unlisten?.();
-    webglAddon?.dispose();
+    canvasAddon?.dispose();
     terminal.dispose();
   };
 
