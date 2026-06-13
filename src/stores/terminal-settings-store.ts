@@ -10,7 +10,7 @@ const defaultSettings: TerminalSettings = {
   cursor_blink: true,
   line_height: 1.2,
   letter_spacing: 0,
-  padding: 8,
+  padding: 12,
   copy_on_select: false,
 };
 

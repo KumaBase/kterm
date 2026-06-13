@@ -150,7 +150,15 @@ export function AppShell() {
       // Fresh start — no surviving sessions
       projectStore.clearAll();
       const project = projectStore.createProject("Workspace");
-      const session = await sessionStore.createSession();
+      const profile = profileStore.getDefaultProfile();
+      const session = profile
+        ? await sessionStore.createSession(
+            profile.shell,
+            profile.args.length > 0 ? profile.args : undefined,
+            profile.cwd || undefined,
+            profile.env.length > 0 ? profile.env as [string, string][] : undefined,
+          )
+        : await sessionStore.createSession();
       projectStore.setPaneSession(project.id, project.tabs[0].id, project.tabs[0].rootPane.id, session.id);
     }
   });
