@@ -6,6 +6,11 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [solid()],
   clearScreen: false,
+  resolve: {
+    alias: {
+      "@xterm/addon-canvas": "@xterm/addon-canvas/lib/xterm-addon-canvas.mjs",
+    },
+  },
   server: {
     port: 1420,
     strictPort: true,
