@@ -94,7 +94,7 @@ jobs:
             |----------|-------------|------|
             | macOS | Apple Silicon (M1/M2/M3/M4) | `kTerm_${{ github.ref_name }}_aarch64.dmg` |
             | macOS | Intel (x86_64) | `kTerm_${{ github.ref_name }}_x64.dmg` |
-            | Windows | x86_64 | `kTerm_${{ github.ref_name }}_x64-setup.exe` or `kTerm_${{ github.ref_name }}_x64_en-US.msi` |
+            | Windows | x86_64 | `kTerm_${{ github.ref_name }}_x64-setup.exe` |
             | Linux | x86_64 | `kTerm_${{ github.ref_name }}_amd64.deb` or `kTerm_${{ github.ref_name }}_amd64.AppImage` or `kTerm-${{ github.ref_name }}-1.x86_64.rpm` |
 
             ---
