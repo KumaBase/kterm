@@ -65,3 +65,17 @@ html, body, #root {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
+
+/* xterm.js IME composition fix (Windows/macOS)
+   Prevent helper textarea from shifting the viewport during IME input */
+.xterm .xterm-helper-textarea {
+  border: 0px !important;
+  position: absolute !important;
+  overflow: hidden !important;
+}
+
+.xterm .composition-view {
+  position: absolute !important;
+  z-index: 10 !important;
+  pointer-events: none !important;
+}
